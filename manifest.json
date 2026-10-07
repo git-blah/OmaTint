@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "id": "widget.grayscale",
+  "name": "GrayScale",
+  "version": "0.1.0",
+  "author": "blah",
+  "license" :"MIT",
+  "description": "grayscale toggle",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "grayscale.qml"
+  },
+  "barWidget": {
+    "displayName": "Grayscale",
+    "description": "Grayscale toggle",
+    "category": "Appearance",
+    "allowMultiple": false,
+    "defaultSection" : "right"
+  }
+}
