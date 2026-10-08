@@ -15,5 +15,5 @@ BarWidget {
     text: ""
     tooltipText: "Hello from my first widget"
     onPressed: function(b) { console.log("widget.grayscale: clicked, button =", b) }
-  }``
+  }
 }
