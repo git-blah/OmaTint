@@ -1,11 +1,13 @@
 import QtQuick
 import qs.Ui
 import Quickshell.Io
-
+import "lua.js" as Lua
 
 BarWidget {
   id: root
   moduleName: "widget.grayscale"
+  implicitWidth: button.implicitWidth
+  implicitHeight: button.implicitHeight
 
   property bool globalOn: false
   readonly property string shaderPath:
@@ -16,7 +18,7 @@ BarWidget {
     root.globalOn = next
     var path = next ? root.shaderPath : ""
     evalProc.command = ["hyprctl", "eval",
-      'hl.config({decoration = {screen_shader = "' + path + '"}})']
+      Lua.setScreenShader(path)]
     evalProc.running = true
   }
   
@@ -26,13 +28,7 @@ BarWidget {
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: {
-        try{
-          var curr = JSON.parse(text).str
-          root.globalOn = !["[[EMPTY]]", ""].includes(curr)
-        }
-        catch(e){
-          console.warn("widget.grayscale:bad hyprctl output:",text,e)
-        }
+          root.globalOn = Lua.screenShaderActive(text)
       }
     }
   }
@@ -48,10 +44,6 @@ BarWidget {
     console.log("widget.grayscale: shader path=",root.shaderPath)
   }
 
-
-
-  implicitWidth: button.implicitWidth
-  implicitHeight: button.implicitHeight
   BarIconButton {
     id: button
     anchors.fill: parent
