@@ -1,20 +1,20 @@
 {
   "schemaVersion": 1,
-  "id": "widget.grayscale",
-  "name": "GrayScale",
+  "id": "widget.tint",
+  "name": "Tint",
   "version": "0.1.0",
   "author": "blah",
   "license" :"MIT",
-  "description": "grayscale toggle",
+  "description": "Customize screen with colors tints(grayscale, warmlight) for perfect visual atmosphere",
   "kinds": [
     "bar-widget"
   ],
   "entryPoints": {
-    "barWidget": "grayscale.qml"
+    "barWidget": "tint.qml"
   },
   "barWidget": {
-    "displayName": "Grayscale",
-    "description": "Grayscale toggle",
+    "displayName": "Tint",
+    "description": "Customize screen with colors tints(grayscale, warmlight) for perfect visual atmosphere",
     "category": "Appearance",
     "allowMultiple": false,
     "defaultSection" : "right"

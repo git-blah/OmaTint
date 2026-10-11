@@ -29,7 +29,7 @@ function screenShaderActive(text){
         const str = JSON.parse(text).str
         return typeof str === "string" && str !== "" && str !== "[[EMPTY]]";
     } catch(e) {
-        console.warn("widget.grayscale:bad hyprctl output:",text,e)
+        console.warn("widget.tint:bad hyprctl output:",text,e)
         return false
     }
 

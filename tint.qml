@@ -5,13 +5,13 @@ import "lua.js" as Lua
 
 BarWidget {
   id: root
-  moduleName: "widget.grayscale"
+  moduleName: "widget.tint"
   implicitWidth: button.implicitWidth
   implicitHeight: button.implicitHeight
 
   property bool globalOn: false
   readonly property string shaderPath:
-    decodeURIComponent(String(Qt.resolvedUrl("grayscale.glsl")).replace(/^file:\/\//, ""))
+    decodeURIComponent(String(Qt.resolvedUrl("shaders/nightlight.glsl")).replace(/^file:\/\//, ""))
 
   function toggleGlobal() {
     var next = !root.globalOn
@@ -41,7 +41,7 @@ BarWidget {
 
   Component.onCompleted: {
     stateProc.running = true
-    console.log("widget.grayscale: shader path=",root.shaderPath)
+    console.log("widget.tint: shader path=",root.shaderPath)
   }
 
   BarIconButton {
@@ -50,8 +50,8 @@ BarWidget {
     bar: root.bar
     text: ""
     dimmed: !root.globalOn
-    tooltipText: root.globalOn ? "Turn Grayscale OFF" : " Turn Grayscale ON"
-    onPressed: function(b) { b===Qt.LeftButton ?root.toggleGlobal() : console.log("widget.grayscale : button pressed",b) }
+    tooltipText: root.globalOn ? "Turn Tint OFF" : " Turn Tint ON"
+    onPressed: function(b) { b===Qt.LeftButton ?root.toggleGlobal() : console.log("widget.tint : button pressed",b) }
 
   }
 }
