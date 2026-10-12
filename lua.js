@@ -34,7 +34,7 @@ function screenShaderActive(text){
     }
 
 }
-module.exports = {
+if (typeof module !== "undefined") module.exports = {
     quote,
     setScreenShader,
     screenShaderActive
