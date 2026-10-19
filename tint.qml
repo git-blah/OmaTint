@@ -19,6 +19,7 @@ BarWidget {
 
   property int slot:0
   property real wheelAccumulator:0
+  property string lastOut: ""
 
   readonly property string pluginDir: decodeURIComponent(String(Qt.resolvedUrl("."))).replace(/^file:\/\//, "").replace(/\/$/, "")
 
@@ -59,8 +60,14 @@ BarWidget {
   function apply() {
     if (!root.globalOn || root.selectedShader === "") return
     srcFile.path = root.pluginDir + "/shaders/" + root.selectedShader
-    srcFile.reload()
     var out = Shader.withIntensity(srcFile.text(), root.intensity)
+    // FileView.setText skips identical text without emitting saved, so
+    // re-send the last file directly (e.g. toggling off and back on).
+    if (out === root.lastOut) {
+      root.sendShader(outFile.path)
+      return
+    }
+    root.lastOut = out
     root.slot = 1 - root.slot
     outFile.path = root.outDir + "/tint-" + (root.slot ? "b" : "a") + ".glsl"
     outFile.setText(out)
@@ -71,9 +78,11 @@ BarWidget {
     evalProc.running = true
   }
 
-  FileView { 
+  // blockLoading only makes the first load synchronous; after a path
+  // change text() would return the previous shader. Always read sync.
+  FileView {
     id: srcFile
-    blockLoading: true
+    blockAllReads: true
   }
 
   FileView {
