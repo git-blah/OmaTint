@@ -175,3 +175,33 @@ for(const [input, expected] of windowShadeCases){
   }
 
 
+test("setClassShader exact output", () => {
+  assert.equal(Lua.setClassShader("foot", "/a/g.glsl"), 'hl.plugin.HyprWindowShade.classshader("foot","/a/g.glsl")')
+  assert.equal(Lua.setClassShader("foot",""),'hl.plugin.HyprWindowShade.classshader("foot","clear")')
+  assert.equal(Lua.setClassShader("foot",null),'hl.plugin.HyprWindowShade.classshader("foot","clear")')
+  assert.equal(Lua.setClassShader("foot",undefined),'hl.plugin.HyprWindowShade.classshader("foot","clear")')
+})
+
+for (const s of HOSTILE) {
+  test("setClassShader run for appId : " + JSON.stringify(s), () => {
+    const out = luaRoundTrip(
+      '(function() local n, r = 0; hl = { plugin = { HyprWindowShade = { classshader = function(id, path) n=n+1; r = id end } } }; '
+      + Lua.setClassShader(s,"/a/g.glsl") + '; assert(n == 1); return r end)()'
+    )
+    if (out !== null) assert.equal(out, s)
+  })  
+  test("setClassShader run for path : " + JSON.stringify(s), () => {
+    const out = luaRoundTrip(
+      '(function() local n, r = 0; hl = { plugin = { HyprWindowShade = { classshader = function(id, path) n=n+1; r = path end } } }; '
+      + Lua.setClassShader("foot",s) + '; assert(n == 1); return r end)()'
+    )
+    if(out!==null) assert.equal(out, s)   
+  })
+}
+  test("setClassShader run for path : \"clear\" ", () => {
+    const out = luaRoundTrip(
+      '(function() local n, r = 0; hl = { plugin = { HyprWindowShade = { classshader = function(id, path) n=n+1; r = path end } } }; '
+      + Lua.setClassShader("foot","") + '; assert(n == 1); return r end)()'
+    )
+    if(out!==null) assert.equal(out, "clear")   
+  })
