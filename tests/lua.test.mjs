@@ -29,7 +29,6 @@ for (const s of HOSTILE) {
     const q = Lua.quote(s)
     
     assert.ok(q.startsWith('"') && q.endsWith('"'))
-
     assert.doesNotMatch(q, /[\u0000-\u001f\u007f]/)
 
     const inner = q.slice(1, -1).replace(/\\./gs, "") 
@@ -105,7 +104,8 @@ test("setScreenShader output is a single line", () => {
   assert.doesNotMatch(Lua.setScreenShader("a\nb\r\nc"), /[\r\n]/)
 })
 
-test("screenShaderActive edge cases", () => {
+test("screenShaderActive edge cases", (t) => {
+  const warn = t.mock.method(console, "warn", () => {})
   assert.equal(Lua.screenShaderActive('{"str":" "}'), true)
   assert.equal(Lua.screenShaderActive('{"str":"[[EMPTY]] "}'), true)
   assert.equal(Lua.screenShaderActive('{"str":"/a/gray.glsl","set":true}'), true)
@@ -155,3 +155,23 @@ test("screenShaderActive handles real hyprctl output", () => {
 test("screenShaderActive rejects an object instead of text", () => {
   assert.equal(Lua.screenShaderActive({ str: "/a/gray.glsl" }), false)
 })
+
+const windowShadeCases = [
+    ['[{"name":"HyprWindowShade"}]', true],
+    ["", false],
+    ["[]", false],
+    ['[{"name":"someOtherPlugin"}]', false],
+    ['[null,{"name":"HyprWindowShade"}]', true],
+    ["not json", false],
+    ["{}", false],
+    ["null", false],
+  ]
+for(const [input, expected] of windowShadeCases){
+    test("windowShadeLoaded("+JSON.stringify(input)+")",(t)=>{
+      t.mock.method(console,"warn",()=>{})
+      assert.equal(Lua.windowShadeLoaded(input),expected)
+
+    })
+  }
+
+

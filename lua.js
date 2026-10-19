@@ -26,16 +26,43 @@ function setScreenShader(path){
 
 function screenShaderActive(text){
     try {
-        const str = JSON.parse(text).str
+        const str = JSON.parse(text)?.str
         return typeof str === "string" && str !== "" && str !== "[[EMPTY]]";
     } catch(e) {
-        console.warn("widget.tint:bad hyprctl output:",text,e)
+        console.warn("widget.tint:bad hyprctl output:",text,e.message)
         return false
     }
 
 }
+
+function setClassShader(appId,path){
+    if(!path){
+        return 'hl.plugin.HyprWindowShade.classshader(' + quote(appId)+',' + '"clear")'
+    }
+    return 'hl.plugin.HyprWindowShade.classshader(' + quote(appId)+',' + quote(path) + ')'
+}
+
+function windowShadeLoaded(text){
+    try {
+        const plugins = JSON.parse(text)
+        
+        if(!Array.isArray(plugins)) return false 
+        
+        return (
+            plugins.some((p)=>p?.name==="HyprWindowShade")
+        )
+        
+    } catch (error) {
+        console.warn("widget.tint: bad input in windowShadeLoaded",text,error.message)
+        return false
+    }
+
+}
+
 if (typeof module !== "undefined") module.exports = {
     quote,
     setScreenShader,
-    screenShaderActive
+    screenShaderActive,
+    setClassShader,
+    windowShadeLoaded
 }
