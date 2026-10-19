@@ -65,3 +65,93 @@ test("Shader State parsing",()=>{
   assert.equal(Lua.screenShaderActive(""), false);
   assert.equal(Lua.screenShaderActive("not json"), false);
 })
+
+test("quote exact escapes", () => {
+  assert.equal(Lua.quote(""), '""')
+  assert.equal(Lua.quote("plain path/x.glsl"), '"plain path/x.glsl"')
+  assert.equal(Lua.quote('a"b'), '"a\\"b"')
+  assert.equal(Lua.quote("a\\b"), '"a\\\\b"')
+  assert.equal(Lua.quote("\n"), '"\\010"')
+  assert.equal(Lua.quote("\t"), '"\\009"')
+  assert.equal(Lua.quote("\u007f"), '"\\127"')
+  assert.equal(Lua.quote("ü✓"), '"ü✓"')
+})
+
+test("quote pads escapes so a following digit is not swallowed", () => {
+  // "\0" + "12" must not become "\012" (newline) in Lua
+  assert.equal(Lua.quote("\u000012"), '"\\00012"')
+  const back = luaRoundTrip(Lua.quote("\u000012"))
+  if (back !== null) assert.equal(back, "\u000012")
+})
+
+test("quote coerces non-strings", () => {
+  assert.equal(Lua.quote(42), '"42"')
+  assert.equal(Lua.quote(null), '"null"')
+  assert.equal(Lua.quote(undefined), '"undefined"')
+  assert.equal(Lua.quote(true), '"true"')
+})
+
+for (const s of HOSTILE) {
+  test("setScreenShader runs as one hl.config call for " + JSON.stringify(s), () => {
+    const out = luaRoundTrip(
+      '(function() local n, r = 0; hl = { config = function(t) n = n + 1; r = t.decoration.screen_shader end }; '
+      + Lua.setScreenShader(s) + '; assert(n == 1); return r end)()'
+    )
+    if (out !== null) assert.equal(out, s)
+  })
+}
+
+test("setScreenShader output is a single line", () => {
+  assert.doesNotMatch(Lua.setScreenShader("a\nb\r\nc"), /[\r\n]/)
+})
+
+test("screenShaderActive edge cases", () => {
+  assert.equal(Lua.screenShaderActive('{"str":" "}'), true)
+  assert.equal(Lua.screenShaderActive('{"str":"[[EMPTY]] "}'), true)
+  assert.equal(Lua.screenShaderActive('{"str":"/a/gray.glsl","set":true}'), true)
+  assert.equal(Lua.screenShaderActive('{"str":true}'), false)
+  assert.equal(Lua.screenShaderActive('{"str":["/a/gray.glsl"]}'), false)
+  assert.equal(Lua.screenShaderActive("[]"), false)
+  assert.equal(Lua.screenShaderActive("42"), false)
+  assert.equal(Lua.screenShaderActive("null"), false)
+  assert.equal(Lua.screenShaderActive(undefined), false)
+})
+
+test("screenShaderActive warns only on unparseable output", (t) => {
+  const warn = t.mock.method(console, "warn", () => {})
+  Lua.screenShaderActive('{"str":"/a/gray.glsl"}')
+  Lua.screenShaderActive('{"str":"[[EMPTY]]"}')
+  assert.equal(warn.mock.callCount(), 0)
+  Lua.screenShaderActive("not json")
+  assert.equal(warn.mock.callCount(), 1)
+  assert.equal(warn.mock.calls[0].arguments[1], "not json")
+})
+
+test("quote passes through emoji, C1 controls and single quotes", () => {
+  for (const s of ["😀 path", "c1\u0085\u009f", "it's"]) {
+    const q = Lua.quote(s)
+    assert.equal(q, '"' + s + '"')
+    const back = luaRoundTrip(q)
+    if (back !== null) assert.equal(back, s)
+  }
+})
+
+test("quote replaces a lone surrogate on the way to Lua", () => {
+  assert.equal(Lua.quote("\uD800"), '"\uD800"')
+  const back = luaRoundTrip(Lua.quote("\uD800"))
+  if (back !== null) assert.equal(back, "�")
+})
+
+test("quote stringifies objects and arrays", () => {
+  assert.equal(Lua.quote({}), '"[object Object]"')
+  assert.equal(Lua.quote(["/a", "/b"]), '"/a,/b"')
+})
+
+test("screenShaderActive handles real hyprctl output", () => {
+  assert.equal(Lua.screenShaderActive('{"option":"decoration:screen_shader","str":"/a/gray.glsl","set":true}\n'), true)
+  assert.equal(Lua.screenShaderActive('{"option":"decoration:screen_shader","str":"[[EMPTY]]","set":false}\n'), false)
+})
+
+test("screenShaderActive rejects an object instead of text", () => {
+  assert.equal(Lua.screenShaderActive({ str: "/a/gray.glsl" }), false)
+})
