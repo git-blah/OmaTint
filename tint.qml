@@ -21,6 +21,8 @@ BarWidget {
   property real wheelAccumulator:0
   property string lastOut: ""
 
+  property var evalQueue : []
+
   readonly property string pluginDir: decodeURIComponent(String(Qt.resolvedUrl("."))).replace(/^file:\/\//, "").replace(/\/$/, "")
 
   // Generated shaders live outside the plugin dir: the shell watches that
@@ -74,7 +76,17 @@ BarWidget {
   }
 
   function sendShader(path) {
-    evalProc.command = ["hyprctl", "eval", Lua.setScreenShader(path)]
+    root.runEval(Lua.setScreenShader(path))
+  }
+
+  function runEval(code){
+    root.evalQueue.push(code)
+    root.pumpEval()
+  }
+
+  function pumpEval(){
+    if(evalProc.running || root.evalQueue.length === 0 ) return
+    evalProc.command = ["hyprctl","eval", root.evalQueue.shift()]
     evalProc.running = true
   }
 
@@ -106,7 +118,14 @@ BarWidget {
 
   Process {
     id : evalProc
-    onExited: stateProc.running = true
+    onExited: {
+      if(root.evalQueue.length !==0) root.pumpEval()
+      else stateProc.running = true
+    }
+    stderr: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: if(text) console.warn("widget.tint: hyprctl eval:", text.trim())
+    }
   }
 
 
