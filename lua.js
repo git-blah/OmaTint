@@ -42,6 +42,27 @@ function setClassShader(appId,path){
     return 'hl.plugin.HyprWindowShade.classshader(' + quote(appId)+',' + quote(path) + ')'
 }
 
+function setWindowShader(addr, path){
+
+return [
+    "do", 
+        "local back = hl.get_active_window()",
+        `hl.dispatch(hl.dsp.focus({ window = ${quote("address:"+addr)}}))`,
+        "local now = hl.get_active_window()",      
+        `if now and now.address == ${quote(addr)}`, 
+        "then",
+            "local shade = hl.plugin.HyprWindowShade",
+            "shade.togglewindowshader(\"clear\")",
+            path ? `shade.togglewindowshader(${quote(path)})` : "",
+        "end",        
+        "if back", 
+        "then hl.dispatch(hl.dsp.focus({ window = \"address:\" .. back.address }))", 
+        "end",
+    "end"
+    ].join(" ")
+}
+
+
 function windowShadeLoaded(text){
     try {
         const plugins = JSON.parse(text)
@@ -64,5 +85,6 @@ if (typeof module !== "undefined") module.exports = {
     setScreenShader,
     screenShaderActive,
     setClassShader,
-    windowShadeLoaded
+    windowShadeLoaded,
+    setWindowShader
 }

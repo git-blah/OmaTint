@@ -24,6 +24,17 @@ function luaRoundTrip(literal) {
   return null                           
 }
 
+function fakeHyprland(active, alive) {
+  return 'local active, calls = ' + Lua.quote(active) + ', {}; '
+    + 'local alive = {}; for _, a in ipairs({' + alive.map(Lua.quote).join(",") + '}) do alive[a] = true end; '
+    + 'hl = { '
+    + '  get_active_window = function() return active and { address = active } or nil end, '
+    + '  dsp = { focus = function(t) return t.window end }, '
+    + '  dispatch = function(sel) local a = sel:match("^address:(.*)$"); if a and alive[a] then active = a end end, '
+    + '  plugin = { HyprWindowShade = { togglewindowshader = function(p) calls[#calls + 1] = p end } } '
+    + '}; '
+}
+
 for (const s of HOSTILE) {
   test("quote is safe for " + JSON.stringify(s), () => {
     const q = Lua.quote(s)
@@ -156,7 +167,7 @@ test("screenShaderActive rejects an object instead of text", () => {
   assert.equal(Lua.screenShaderActive({ str: "/a/gray.glsl" }), false)
 })
 
-const windowShadeCases = [
+const windowShadeLoadCases = [
     ['[{"name":"HyprWindowShade"}]', true],
     ["", false],
     ["[]", false],
@@ -166,7 +177,7 @@ const windowShadeCases = [
     ["{}", false],
     ["null", false],
   ]
-for(const [input, expected] of windowShadeCases){
+for(const [input, expected] of windowShadeLoadCases){
     test("windowShadeLoaded("+JSON.stringify(input)+")",(t)=>{
       t.mock.method(console,"warn",()=>{})
       assert.equal(Lua.windowShadeLoaded(input),expected)
@@ -198,10 +209,60 @@ for (const s of HOSTILE) {
     if(out!==null) assert.equal(out, s)   
   })
 }
-  test("setClassShader run for path : \"clear\" ", () => {
+
+test("setClassShader run for path : \"clear\" ", () => {
+  const out = luaRoundTrip(
+    '(function() local n, r = 0; hl = { plugin = { HyprWindowShade = { classshader = function(id, path) n=n+1; r = path end } } }; '
+    + Lua.setClassShader("foot","") + '; assert(n == 1); return r end)()'
+  )
+  if(out!==null) assert.equal(out, "clear")   
+})
+
+test("setWindowShader does nothing when the target window is gone",()=>{
+  const out = luaRoundTrip(
+    '(function() ' + fakeHyprland("0x1", ["0x1"])
+    + Lua.setWindowShader("0x2", "/a/g.glsl")
+    + ' return table.concat(calls, "|") .. "#" .. active end)()'
+  )
+  if(out!==null) assert.equal(out, "#0x1" )
+})
+
+test("setWindowShader turns a present window on and refocuses",()=>{
+  const out = luaRoundTrip(
+    `(function()` + fakeHyprland("0x1",["0x1","0x2"])
+    + Lua.setWindowShader("0x2","/a/g.glsl")
+    + ` return table.concat(calls, "|") .. "#" .. active end)()`
+  )
+  if(out!==null) assert.equal(out, "clear|/a/g.glsl#0x1")
+})
+
+test("setWindowShader turns a present window off and refocuses",()=>{
+  const out = luaRoundTrip(
+    `(function()` + fakeHyprland("0x1",["0x1","0x2"])
+    + Lua.setWindowShader("0x2","")
+    + ` return table.concat(calls, "|") .. "#" .. active end)()`
+  )
+  if(out!==null) assert.equal(out, "clear#0x1")
+})
+
+for( const s of HOSTILE){
+  test("setWindowShader handles hostile address "+JSON.stringify(s),()=>{
     const out = luaRoundTrip(
-      '(function() local n, r = 0; hl = { plugin = { HyprWindowShade = { classshader = function(id, path) n=n+1; r = path end } } }; '
-      + Lua.setClassShader("foot","") + '; assert(n == 1); return r end)()'
+      `(function()` + fakeHyprland("0x1",["0x1",s])
+      + Lua.setWindowShader(s,"/a/g.glsl")
+      + ` return table.concat(calls, "|") .. "#" .. active end)()`
     )
-    if(out!==null) assert.equal(out, "clear")   
+    if(out!==null) assert.equal(out,"clear|/a/g.glsl#0x1")
   })
+}
+
+for( const s of HOSTILE){
+  test("setWindowShader handles hostile path "+JSON.stringify(s),()=>{
+    const out = luaRoundTrip(
+      `(function()` + fakeHyprland("0x1",["0x1","0x2"])
+      + Lua.setWindowShader("0x2",s)
+      + ` return calls[2] end)()`
+    )
+    if(out!==null) assert.equal(out,s)
+  })
+}
