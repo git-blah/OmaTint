@@ -17,6 +17,7 @@ BarWidget {
     property real wheelAccumulator: 0
     property string lastOut: ""
     property var evalQueue: []
+    property bool windowShadeLoaded: false
     readonly property string pluginDir: decodeURIComponent(String(Qt.resolvedUrl("."))).replace(/^file:\/\//, "").replace(/\/$/, "")
     // Generated shaders live outside the plugin dir: the shell watches that
     // dir recursively and would reload the widget on every write.
@@ -81,12 +82,17 @@ BarWidget {
         evalProc.running = true;
     }
 
+    function refreshState() {
+        stateProc.running = true;
+        pluginProc.running = true;
+    }
+
     moduleName: "widget.tint"
     implicitWidth: button.implicitWidth
     implicitHeight: button.implicitHeight
     Component.onCompleted: {
         mkdirProc.running = true;
-        stateProc.running = true;
+        root.refreshState();
     }
 
     FolderListModel {
@@ -128,21 +134,35 @@ BarWidget {
     }
 
     Process {
+        id: pluginProc
+
+        command: ["hyprctl", "-j", "plugin", "list"]
+
+        stdout: StdioCollector {
+            waitForEnd: true
+            onStreamFinished: {
+                root.windowShadeLoaded = Lua.windowShadeLoaded(text);
+            }
+        }
+
+    }
+
+    Process {
         id: evalProc
 
         onExited: {
             if (root.evalQueue.length !== 0)
                 root.pumpEval();
             else
-                stateProc.running = true;
+                root.refreshState();
         }
 
         stderr: StdioCollector {
             waitForEnd: true
             onStreamFinished: {
-                if (text) {
+                if (text)
                     console.warn("widget.tint: hyprctl eval:", text.trim());
-                }
+
             }
         }
 
