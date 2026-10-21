@@ -19,6 +19,7 @@ BarWidget {
     property string lastOut: ""
     property var evalQueue: []
     property bool windowShadeLoaded: false
+    property bool opened: false
     readonly property string pluginDir: decodeURIComponent(String(Qt.resolvedUrl("."))).replace(/^file:\/\//, "").replace(/\/$/, "")
     // Generated shaders live outside the plugin dir: the shell watches that
     // dir recursively and would reload the widget on every write.
@@ -30,7 +31,7 @@ BarWidget {
         for (const t of Hyprland.toplevels.values){
             
             const address = Lua.hyprAddress(t.address)
-            if (address == "") continue
+            if (address === "") continue
 
             const title = t.title
             const appId = t.wayland ? t.wayland.appId : ""
@@ -47,6 +48,9 @@ BarWidget {
         return out
     }
     
+    function close(){
+        root.opened = false
+    }
 
     function setIntensity(v) {
         root.intensity = Math.max(0, Math.min(1, v));
@@ -205,11 +209,13 @@ BarWidget {
         bar: root.bar
         text: ""
         dimmed: !root.globalOn
-        tooltipText: root.globalOn ? Shader.displayName(root.selectedShader) + " · " + Math.round(root.intensity * 100) + "%" : "Turn Tint ON"
+        tooltipText: root.globalOn ? Shader.displayName(root.selectedShader) + " · " + Math.round(root.intensity * 100) + "% \n Middle click to change tints" : "Turn Tint ON"
         onPressed: function(b) {
             if (b === Qt.LeftButton)
                 root.toggleGlobal();
             else if (b === Qt.RightButton)
+                root.opened = !root.opened
+            else if(b===Qt.MiddleButton)
                 root.selectShader(root.shaderIndex + 1);
         }
         onWheelMoved: function(delta) {
@@ -218,6 +224,88 @@ BarWidget {
             if (w.steps !== 0)
                 root.setIntensity(root.intensity + w.steps * 0.05);
 
+        }
+    }
+
+    KeyboardPanel {
+        id: panel
+        anchorItem: button
+        bar: root.bar
+        owner: root
+        open: root.opened
+        contentHeight: panel.fittedContentHeight(list.implicitHeight)
+        contentWidth: panel.fittedContentWidth(Style.space(260))
+
+        Column {
+            id: list
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.top: parent.top
+            
+            PanelSectionHeader {
+                text: "Per App Shade"
+                foreground: root.bar ? root.bar.barForeground : Color.foreground
+                fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
+            }
+
+            Text {
+                visible:!root.windowShadeLoaded
+                text: "HyprWindowShade plugin missing"
+            }
+
+            Repeater {
+                model : root.windowShadeLoaded ? root.runningWindows : []
+
+                delegate: Item {
+                    id: rowItem
+                    width: list.width
+                    height: row.implicitHeight
+                    required property var modelData
+                    CursorSurface {
+                        id: row
+                        width: parent.width
+                        implicitHeight: Math.max(appIcon.height, label.implicitHeight)+ Style.space(14)
+                        hasCursor: mouseArea.containsMouse
+
+                        Image {
+                            id: appIcon
+                            anchors.verticalCenter: parent.verticalCenter
+                            anchors.left: parent.left
+                            anchors.leftMargin: Style.space(8)
+                            width: Style.font.iconLarge
+                            height: Style.font.iconLarge
+                            fillMode: Image.PreserveAspectFit
+                            sourceSize.width: width * Screen.devicePixelRatio
+                            sourceSize.height: height * Screen.devicePixelRatio
+                            asynchronous: true
+                            source: rowItem.modelData.icon || ""
+                        }
+
+                        Text {
+                            id: label
+                            anchors.verticalCenter: parent.verticalCenter
+                            anchors.left: appIcon.right
+                            anchors.right: parent.right
+                            anchors.leftMargin: Style.space(8)
+                            anchors.rightMargin: Style.space(8)
+                            textFormat: Text.PlainText
+                            elide: Text.ElideRight
+                            text: rowItem.modelData.title
+                            color: root.bar ? root.bar.barForeground : Color.foreground
+                            font.family: root.bar ? root.bar.fontFamily : Style.font.family
+                            font.pixelSize: Style.font.body
+                        }
+
+                        MouseArea {
+                            id: mouseArea
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                        }
+                    }
+                    
+                }
+            }
         }
     }
 
