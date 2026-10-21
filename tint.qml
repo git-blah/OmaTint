@@ -1,3 +1,4 @@
+import Quickshell.Hyprland
 import Qt.labs.folderlistmodel
 import QtQuick
 import Quickshell
@@ -24,6 +25,28 @@ BarWidget {
     readonly property string outDir: Quickshell.env("XDG_RUNTIME_DIR") + "/widget-tint"
     readonly property string selectedShader: shaderList.count > 0 ? shaderList.get(shaderIndex % shaderList.count, "fileName") : ""
     readonly property string shaderPath: decodeURIComponent(String(Qt.resolvedUrl("shaders/nightlight.glsl")).replace(/^file:\/\//, ""))
+    readonly property var runningWindows: {
+        const out = []
+        for (const t of Hyprland.toplevels.values){
+            
+            const address = Lua.hyprAddress(t.address)
+            if (address == "") continue
+
+            const title = t.title
+            const appId = t.wayland ? t.wayland.appId : ""
+            const icon = appId ? Quickshell.iconPath(appId, true) : ""
+        
+            out.push({
+                address : address,
+                title : title,
+                appId : appId,
+                icon : icon
+            })
+        }
+
+        return out
+    }
+    
 
     function setIntensity(v) {
         root.intensity = Math.max(0, Math.min(1, v));
@@ -90,6 +113,7 @@ BarWidget {
     moduleName: "widget.tint"
     implicitWidth: button.implicitWidth
     implicitHeight: button.implicitHeight
+    (root.runningWindows))
     Component.onCompleted: {
         mkdirProc.running = true;
         root.refreshState();
