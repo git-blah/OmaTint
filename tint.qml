@@ -18,6 +18,7 @@ BarWidget {
     property real wheelAccumulator: 0
     property string lastOut: ""
     property var evalQueue: []
+    property var perWindowOn : ({})
     property bool windowShadeLoaded: false
     property bool opened: false
     readonly property string pluginDir: decodeURIComponent(String(Qt.resolvedUrl("."))).replace(/^file:\/\//, "").replace(/\/$/, "")
@@ -25,14 +26,13 @@ BarWidget {
     // dir recursively and would reload the widget on every write.
     readonly property string outDir: Quickshell.env("XDG_RUNTIME_DIR") + "/widget-tint"
     readonly property string selectedShader: shaderList.count > 0 ? shaderList.get(shaderIndex % shaderList.count, "fileName") : ""
-    readonly property string shaderPath: decodeURIComponent(String(Qt.resolvedUrl("shaders/nightlight.glsl")).replace(/^file:\/\//, ""))
+    readonly property string windowShaderPath: decodeURIComponent(String(Qt.resolvedUrl("shaders/grayscale.glsl")).replace(/^file:\/\//, ""))
     readonly property var runningWindows: {
         const out = []
         for (const t of Hyprland.toplevels.values){
             
             const address = Lua.hyprAddress(t.address)
             if (address === "") continue
-
             const title = t.title
             const appId = t.wayland ? t.wayland.appId : ""
             const icon = appId ? Quickshell.iconPath(appId, true) : ""
@@ -44,7 +44,6 @@ BarWidget {
                 icon : icon
             })
         }
-
         return out
     }
     
@@ -113,6 +112,22 @@ BarWidget {
         stateProc.running = true;
         pluginProc.running = true;
     }
+
+    function setWindowShade(address, on) {
+        // TODO: follow the selected shader + intensity like global does (see notes.md)
+
+        root.runEval(Lua.setWindowShader(address, on ? root.windowShaderPath : ""))
+        const obj = Object.assign({},root.perWindowOn)
+        if(on) obj[address] = true 
+        else delete obj[address]
+        root.perWindowOn = obj  // assign new object so binding notice.
+    }
+
+    function toggleWindow(address){
+        if(!root.windowShadeLoaded) return
+        setWindowShade(address, !root.perWindowOn[address])
+    }
+
 
     moduleName: "widget.tint"
     implicitWidth: button.implicitWidth
@@ -209,7 +224,7 @@ BarWidget {
         bar: root.bar
         text: ""
         dimmed: !root.globalOn
-        tooltipText: root.globalOn ? Shader.displayName(root.selectedShader) + " · " + Math.round(root.intensity * 100) + "% \n Middle click to change tints" : "Turn Tint ON"
+        tooltipText: root.globalOn ? Shader.displayName(root.selectedShader) + " · " + Math.round(root.intensity * 100) + "% \nMiddle-click:change tint" : "Turn Tint ON"
         onPressed: function(b) {
             if (b === Qt.LeftButton)
                 root.toggleGlobal();
@@ -243,14 +258,14 @@ BarWidget {
             anchors.top: parent.top
             
             PanelSectionHeader {
-                text: "Per App Shade"
+                text: "Per Window Shade"
                 foreground: root.bar ? root.bar.barForeground : Color.foreground
                 fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
             }
 
             Text {
                 visible:!root.windowShadeLoaded
-                text: "HyprWindowShade plugin missing"
+                text: "Per-window tint needs the HyprWindowShade plugin. Refer README."
             }
 
             Repeater {
@@ -266,6 +281,7 @@ BarWidget {
                         width: parent.width
                         implicitHeight: Math.max(appIcon.height, label.implicitHeight)+ Style.space(14)
                         hasCursor: mouseArea.containsMouse
+                        current: !!root.perWindowOn[rowItem.modelData.address]
 
                         Image {
                             id: appIcon
@@ -301,6 +317,7 @@ BarWidget {
                             anchors.fill: parent
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
+                            onClicked: root.toggleWindow(rowItem.modelData.address)
                         }
                     }
                     
