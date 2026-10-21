@@ -30,7 +30,6 @@ BarWidget {
     readonly property var runningWindows: {
         const out = []
         for (const t of Hyprland.toplevels.values){
-            
             const address = Lua.hyprAddress(t.address)
             if (address === "") continue
             const title = t.title
@@ -44,7 +43,28 @@ BarWidget {
                 icon : icon
             })
         }
+
         return out
+    }
+
+    onRunningWindowsChanged: {
+        var reassignFlag = false
+        var kept = ({})
+        var alive = ({})
+        for (const a of root.runningWindows){
+            alive[a.address] = true
+        }
+        for (const addr in root.perWindowOn){
+            if (addr in alive ){
+                kept[addr] = true
+            }
+            else{
+                reassignFlag = true
+            }
+        }
+        if(reassignFlag){
+            root.perWindowOn = kept
+        }
     }
     
     function close(){
@@ -262,7 +282,7 @@ BarWidget {
                 foreground: root.bar ? root.bar.barForeground : Color.foreground
                 fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
             }
-
+            
             Text {
                 visible:!root.windowShadeLoaded
                 text: "Per-window tint needs the HyprWindowShade plugin. Refer README."
