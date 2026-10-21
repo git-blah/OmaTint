@@ -20,6 +20,13 @@ function quote(value){
     return '"' + out + '"';
 }
 
+function hyprAddress(value){
+    const str = String(value)
+    if (str === "") return "";
+    if (/^0x[0-9a-f]+$/i.test(str)) return str;
+    if (/^[0-9a-f]+$/.test(str)) return "0x" + str;
+}
+
 function setScreenShader(path){
     return 'hl.config({decoration = {screen_shader = ' + quote(path) + '}})'
 }
@@ -82,6 +89,7 @@ function windowShadeLoaded(text){
 
 if (typeof module !== "undefined") module.exports = {
     quote,
+    hyprAddress,
     setScreenShader,
     screenShaderActive,
     setClassShader,

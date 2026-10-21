@@ -266,3 +266,13 @@ for( const s of HOSTILE){
     if(out!==null) assert.equal(out,s)
   })
 }
+
+
+const hyprAddressTestCase = [["",""],["563e8f5eae30","0x563e8f5eae30"],["0x563e8f5eae30","0x563e8f5eae30"]]
+
+for(const [s, ans] of hyprAddressTestCase){
+  test("testing hyprAddress for: "+JSON.stringify(s),()=>{
+    assert.equal(Lua.hyprAddress(s),ans)
+  })
+
+}
