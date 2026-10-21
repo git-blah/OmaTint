@@ -24,7 +24,8 @@ function hyprAddress(value){
     const str = String(value)
     if (str === "") return "";
     if (/^0x[0-9a-f]+$/i.test(str)) return str;
-    if (/^[0-9a-f]+$/.test(str)) return "0x" + str;
+    if (/^[0-9a-f]+$/i.test(str)) return "0x" + str;
+    return ""
 }
 
 function setScreenShader(path){

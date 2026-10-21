@@ -268,7 +268,7 @@ for( const s of HOSTILE){
 }
 
 
-const hyprAddressTestCase = [["",""],["563e8f5eae30","0x563e8f5eae30"],["0x563e8f5eae30","0x563e8f5eae30"]]
+const hyprAddressTestCase = [["",""],["563e8f5eae30","0x563e8f5eae30"],["0x563e8f5eae30","0x563e8f5eae30"],["ABC","0xABC"],["xyz",""],["null",""],["0x",""]]
 
 for(const [s, ans] of hyprAddressTestCase){
   test("testing hyprAddress for: "+JSON.stringify(s),()=>{
