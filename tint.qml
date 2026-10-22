@@ -22,8 +22,8 @@ BarWidget {
     property var evalQueue: []
     property var perWindowOn: ({
     })
-    property bool windowShadeLoaded: false
-    property bool opened: false
+    property bool windowShaderLoaded: false
+    property bool openedToggle: false
     readonly property string pluginDir: decodeURIComponent(String(Qt.resolvedUrl("."))).replace(/^file:\/\//, "").replace(/\/$/, "")
     // Generated shaders live outside the plugin dir: the shell watches that
     // dir recursively and would reload the widget on every write.
@@ -51,7 +51,8 @@ BarWidget {
     }
 
     function close() {
-        root.opened = false;
+        //KeyboardPanel calls owner.close() on an outside click
+        root.openedToggle = false;
     }
 
     function setIntensity(v) {
@@ -70,10 +71,12 @@ BarWidget {
     function toggleGlobal() {
         var next = !root.globalOn;
         root.globalOn = next;
-        if (root.globalOn)
+        if (root.globalOn) {
+            root.clearAllWindows();
             root.apply();
-        else
+        } else {
             root.sendShader("");
+        }
     }
 
     function apply() {
@@ -128,10 +131,25 @@ BarWidget {
     }
 
     function toggleWindow(address) {
-        if (!root.windowShadeLoaded)
+        if (!root.windowShaderLoaded)
+            return ;
+
+        if (root.globalOn)
             return ;
 
         setWindowShade(address, !root.perWindowOn[address]);
+    }
+
+    function clearAllWindows() {
+        if (Object.keys(root.perWindowOn).length === 0)
+            return ;
+
+        root.runEval(Object.keys(root.perWindowOn).map((addr) => {
+            return Lua.setWindowShader(addr, "");
+        }).join(" "));
+        root.perWindowOn = ({
+        });
+        return ;
     }
 
     onRunningWindowsChanged: {
@@ -207,7 +225,7 @@ BarWidget {
         stdout: StdioCollector {
             waitForEnd: true
             onStreamFinished: {
-                root.windowShadeLoaded = Lua.windowShadeLoaded(text);
+                root.windowShaderLoaded = Lua.windowShadeLoaded(text);
             }
         }
 
@@ -252,7 +270,7 @@ BarWidget {
             if (b === Qt.LeftButton)
                 root.toggleGlobal();
             else if (b === Qt.RightButton)
-                root.opened = !root.opened;
+                root.openedToggle = !root.openedToggle;
             else if (b === Qt.MiddleButton)
                 root.selectShader(root.shaderIndex + 1);
         }
@@ -271,7 +289,7 @@ BarWidget {
         anchorItem: button
         bar: root.bar
         owner: root
-        open: root.opened
+        open: root.openedToggle
         contentHeight: panel.fittedContentHeight(list.implicitHeight)
         contentWidth: panel.fittedContentWidth(Style.space(260))
 
@@ -289,12 +307,29 @@ BarWidget {
             }
 
             Text {
-                visible: !root.windowShadeLoaded
+                visible: !root.windowShaderLoaded
                 text: "Per-window tint needs the HyprWindowShade plugin. Refer README."
+                color: root.bar ? root.bar.barForeground : Color.foreground
+                font.family: root.bar ? root.bar.fontFamily : Style.font.family
+                font.pixelSize: Style.font.body
+                textFormat: Text.PlainText
+                wrapMode: Text.WordWrap
+                width: list.width
+            }
+
+            Text {
+                visible: root.globalOn
+                text: "Global tint is on: per-window tint applies when its off"
+                color: root.bar ? root.bar.barForeground : Color.foreground
+                font.family: root.bar ? root.bar.fontFamily : Style.font.family
+                font.pixelSize: Style.font.body
+                font.italic: true
+                wrapMode: Text.WordWrap
+                width: list.width
             }
 
             Repeater {
-                model: root.windowShadeLoaded ? root.runningWindows : []
+                model: root.windowShaderLoaded ? root.runningWindows : []
 
                 delegate: Item {
                     id: rowItem
@@ -309,7 +344,7 @@ BarWidget {
 
                         width: parent.width
                         implicitHeight: Math.max(appIcon.height, label.implicitHeight) + Style.space(14)
-                        hasCursor: mouseArea.containsMouse
+                        hasCursor: root.globalOn ? false : mouseArea.containsMouse
                         current: !!root.perWindowOn[rowItem.modelData.address]
 
                         Image {
@@ -341,6 +376,7 @@ BarWidget {
                             color: root.bar ? root.bar.barForeground : Color.foreground
                             font.family: root.bar ? root.bar.fontFamily : Style.font.family
                             font.pixelSize: Style.font.body
+                            opacity: root.globalOn ? 0.5 : 1
                         }
 
                         MouseArea {
