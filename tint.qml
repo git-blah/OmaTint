@@ -1,7 +1,7 @@
-import Quickshell.Hyprland
 import Qt.labs.folderlistmodel
 import QtQuick
 import Quickshell
+import Quickshell.Hyprland
 import Quickshell.Io
 import "lua.js" as Lua
 import qs.Commons
@@ -9,6 +9,8 @@ import qs.Ui
 import "shader.js" as Shader
 
 BarWidget {
+    // TODO: follow the selected shader + intensity like global does (see notes.md)
+
     id: root
 
     property bool globalOn: false
@@ -18,7 +20,8 @@ BarWidget {
     property real wheelAccumulator: 0
     property string lastOut: ""
     property var evalQueue: []
-    property var perWindowOn : ({})
+    property var perWindowOn: ({
+    })
     property bool windowShadeLoaded: false
     property bool opened: false
     readonly property string pluginDir: decodeURIComponent(String(Qt.resolvedUrl("."))).replace(/^file:\/\//, "").replace(/\/$/, "")
@@ -28,47 +31,27 @@ BarWidget {
     readonly property string selectedShader: shaderList.count > 0 ? shaderList.get(shaderIndex % shaderList.count, "fileName") : ""
     readonly property string windowShaderPath: decodeURIComponent(String(Qt.resolvedUrl("shaders/grayscale.glsl")).replace(/^file:\/\//, ""))
     readonly property var runningWindows: {
-        const out = []
-        for (const t of Hyprland.toplevels.values){
-            const address = Lua.hyprAddress(t.address)
-            if (address === "") continue
-            const title = t.title
-            const appId = t.wayland ? t.wayland.appId : ""
-            const icon = appId ? Quickshell.iconPath(appId, true) : ""
-        
+        const out = [];
+        for (const t of Hyprland.toplevels.values) {
+            const address = Lua.hyprAddress(t.address);
+            if (address === "")
+                continue;
+
+            const title = t.title;
+            const appId = t.wayland ? t.wayland.appId : "";
+            const icon = appId ? Quickshell.iconPath(appId, true) : "";
             out.push({
-                address : address,
-                title : title,
-                appId : appId,
-                icon : icon
-            })
+                "address": address,
+                "title": title,
+                "appId": appId,
+                "icon": icon
+            });
         }
-
-        return out
+        return out;
     }
 
-    onRunningWindowsChanged: {
-        var reassignFlag = false
-        var kept = ({})
-        var alive = ({})
-        for (const a of root.runningWindows){
-            alive[a.address] = true
-        }
-        for (const addr in root.perWindowOn){
-            if (addr in alive ){
-                kept[addr] = true
-            }
-            else{
-                reassignFlag = true
-            }
-        }
-        if(reassignFlag){
-            root.perWindowOn = kept
-        }
-    }
-    
-    function close(){
-        root.opened = false
+    function close() {
+        root.opened = false;
     }
 
     function setIntensity(v) {
@@ -134,25 +117,45 @@ BarWidget {
     }
 
     function setWindowShade(address, on) {
-        // TODO: follow the selected shader + intensity like global does (see notes.md)
-
-        root.runEval(Lua.setWindowShader(address, on ? root.windowShaderPath : ""))
-        const obj = Object.assign({},root.perWindowOn)
-        if(on) obj[address] = true 
-        else delete obj[address]
-        root.perWindowOn = obj  // assign new object so binding notice.
+        root.runEval(Lua.setWindowShader(address, on ? root.windowShaderPath : ""));
+        const obj = Object.assign({
+        }, root.perWindowOn);
+        if (on)
+            obj[address] = true;
+        else
+            delete obj[address];
+        root.perWindowOn = obj; // assign new object so binding notice.
     }
 
-    function toggleWindow(address){
-        if(!root.windowShadeLoaded) return
-        setWindowShade(address, !root.perWindowOn[address])
+    function toggleWindow(address) {
+        if (!root.windowShadeLoaded)
+            return ;
+
+        setWindowShade(address, !root.perWindowOn[address]);
     }
 
+    onRunningWindowsChanged: {
+        var reassignFlag = false;
+        var kept = ({
+        });
+        var alive = ({
+        });
+        for (const a of root.runningWindows) {
+            alive[a.address] = true;
+        }
+        for (const addr in root.perWindowOn) {
+            if (addr in alive)
+                kept[addr] = true;
+            else
+                reassignFlag = true;
+        }
+        if (reassignFlag)
+            root.perWindowOn = kept;
 
+    }
     moduleName: "widget.tint"
     implicitWidth: button.implicitWidth
     implicitHeight: button.implicitHeight
-    (root.runningWindows))
     Component.onCompleted: {
         mkdirProc.running = true;
         root.refreshState();
@@ -249,8 +252,8 @@ BarWidget {
             if (b === Qt.LeftButton)
                 root.toggleGlobal();
             else if (b === Qt.RightButton)
-                root.opened = !root.opened
-            else if(b===Qt.MiddleButton)
+                root.opened = !root.opened;
+            else if (b === Qt.MiddleButton)
                 root.selectShader(root.shaderIndex + 1);
         }
         onWheelMoved: function(delta) {
@@ -264,6 +267,7 @@ BarWidget {
 
     KeyboardPanel {
         id: panel
+
         anchorItem: button
         bar: root.bar
         owner: root
@@ -273,38 +277,44 @@ BarWidget {
 
         Column {
             id: list
+
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.top: parent.top
-            
+
             PanelSectionHeader {
                 text: "Per Window Shade"
                 foreground: root.bar ? root.bar.barForeground : Color.foreground
                 fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
             }
-            
+
             Text {
-                visible:!root.windowShadeLoaded
+                visible: !root.windowShadeLoaded
                 text: "Per-window tint needs the HyprWindowShade plugin. Refer README."
             }
 
             Repeater {
-                model : root.windowShadeLoaded ? root.runningWindows : []
+                model: root.windowShadeLoaded ? root.runningWindows : []
 
                 delegate: Item {
                     id: rowItem
+
+                    required property var modelData
+
                     width: list.width
                     height: row.implicitHeight
-                    required property var modelData
+
                     CursorSurface {
                         id: row
+
                         width: parent.width
-                        implicitHeight: Math.max(appIcon.height, label.implicitHeight)+ Style.space(14)
+                        implicitHeight: Math.max(appIcon.height, label.implicitHeight) + Style.space(14)
                         hasCursor: mouseArea.containsMouse
                         current: !!root.perWindowOn[rowItem.modelData.address]
 
                         Image {
                             id: appIcon
+
                             anchors.verticalCenter: parent.verticalCenter
                             anchors.left: parent.left
                             anchors.leftMargin: Style.space(8)
@@ -319,6 +329,7 @@ BarWidget {
 
                         Text {
                             id: label
+
                             anchors.verticalCenter: parent.verticalCenter
                             anchors.left: appIcon.right
                             anchors.right: parent.right
@@ -334,16 +345,21 @@ BarWidget {
 
                         MouseArea {
                             id: mouseArea
+
                             anchors.fill: parent
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
                             onClicked: root.toggleWindow(rowItem.modelData.address)
                         }
+
                     }
-                    
+
                 }
+
             }
+
         }
+
     }
 
 }
