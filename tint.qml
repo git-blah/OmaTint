@@ -117,10 +117,11 @@ BarWidget {
     function refreshState() {
         stateProc.running = true;
         pluginProc.running = true;
+        clientsProc.running = true;
     }
 
     function setWindowShade(address, on) {
-        root.runEval(Lua.setWindowShader(address, on ? root.windowShaderPath : ""));
+        root.runEval(Lua.setWindowShader(address, on ? root.windowShaderPath : "") + " " + Lua.tagWindow(address, on));
         const obj = Object.assign({
         }, root.perWindowOn);
         if (on)
@@ -145,7 +146,7 @@ BarWidget {
             return ;
 
         root.runEval(Object.keys(root.perWindowOn).map((addr) => {
-            return Lua.setWindowShader(addr, "");
+            return Lua.setWindowShader(addr, "") + " " + Lua.tagWindow(addr, false);
         }).join(" "));
         root.perWindowOn = ({
         });
@@ -226,6 +227,20 @@ BarWidget {
             waitForEnd: true
             onStreamFinished: {
                 root.windowShaderLoaded = Lua.windowShadeLoaded(text);
+            }
+        }
+
+    }
+
+    Process {
+        id: clientsProc
+
+        command: ["hyprctl", "-j", "clients"]
+
+        stdout: StdioCollector {
+            waitForEnd: true
+            onStreamFinished: {
+                root.perWindowOn = Lua.windowsMarked(text);
             }
         }
 
