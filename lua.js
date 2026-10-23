@@ -50,6 +50,35 @@ function setClassShader(appId,path){
     return 'hl.plugin.HyprWindowShade.classshader(' + quote(appId)+',' + quote(path) + ')'
 }
 
+function tagWindow(address, on){
+    return(
+    'hl.dispatch(hl.dsp.window.tag({tag ='
+    + quote((on ? "+" : "-")
+    +"widget.tint")
+    +', window = '
+    +quote("address:"+address)
+    +'}))'
+    ) 
+}
+
+function windowsMarked(text){
+    let marked = {}
+    try{
+        const windows = JSON.parse(text)
+        if(!Array.isArray(windows)) return {}
+        for (const win of windows){
+            if(Array.isArray(win?.tags) && win.tags.includes("widget.tint")){
+                marked[win.address] = true
+            }
+        }
+        return marked
+
+    } catch(err){
+        console.warn("widget.tint: error in marked windowsTags", text, err.message)
+        return {}
+    }
+}
+
 function setWindowShader(addr, path){
 
 return [
@@ -69,7 +98,6 @@ return [
     "end"
     ].join(" ")
 }
-
 
 function windowShadeLoaded(text){
     try {
@@ -95,5 +123,7 @@ if (typeof module !== "undefined") module.exports = {
     screenShaderActive,
     setClassShader,
     windowShadeLoaded,
-    setWindowShader
+    setWindowShader,
+    tagWindow,
+    windowsMarked
 }
