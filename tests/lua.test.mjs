@@ -378,3 +378,7 @@ for (const [windows, ans] of testWindowsTags) {
     assert.deepEqual(Lua.windowsMarked(windows), ans);
   });
 }
+
+test("notify : ", () => {
+  assert.equal(Lua.notifyChanged(), 'hl.dispatch(hl.dsp.event("widget.tint"))');
+});

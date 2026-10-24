@@ -110,7 +110,11 @@ BarWidget {
         if (evalProc.running || root.evalQueue.length === 0)
             return ;
 
-        evalProc.command = ["hyprctl", "eval", root.evalQueue.shift()];
+        let code = root.evalQueue.shift();
+        if (root.evalQueue.length === 0)
+            code += " " + Lua.notifyChanged();
+
+        evalProc.command = ["hyprctl", "eval", code];
         evalProc.running = true;
     }
 
@@ -172,12 +176,30 @@ BarWidget {
             root.perWindowOn = kept;
 
     }
+    onOpenedToggleChanged: {
+        if (root.openedToggle)
+            root.refreshState();
+
+    }
     moduleName: "widget.tint"
     implicitWidth: button.implicitWidth
     implicitHeight: button.implicitHeight
     Component.onCompleted: {
         mkdirProc.running = true;
         root.refreshState();
+    }
+
+    Connections {
+        function onRawEvent(event) {
+            if (["configreloaded"].includes(event.name))
+                root.refreshState();
+
+            if (event.name === "custom" && event.data === "widget.tint")
+                root.refreshState();
+
+        }
+
+        target: Hyprland
     }
 
     FolderListModel {

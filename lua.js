@@ -116,6 +116,10 @@ function windowShadeLoaded(text){
 
 }
 
+function notifyChanged(){
+    return ('hl.dispatch(hl.dsp.event("widget.tint"))')
+}
+
 if (typeof module !== "undefined") module.exports = {
     quote,
     hyprAddress,
@@ -125,5 +129,6 @@ if (typeof module !== "undefined") module.exports = {
     windowShadeLoaded,
     setWindowShader,
     tagWindow,
-    windowsMarked
+    windowsMarked,
+    notifyChanged
 }
