@@ -119,9 +119,9 @@ BarWidget {
     }
 
     function refreshState() {
-        stateProc.running = true;
-        pluginProc.running = true;
-        clientsProc.running = true;
+        root.rerun(stateProc);
+        root.rerun(pluginProc);
+        root.rerun(clientsProc);
     }
 
     function setWindowShade(address, on) {
@@ -143,6 +143,13 @@ BarWidget {
             return ;
 
         setWindowShade(address, !root.perWindowOn[address]);
+    }
+
+    function rerun(proc) {
+        if (proc.running)
+            proc.again = true;
+        else
+            proc.running = true;
     }
 
     function clearAllWindows() {
@@ -229,7 +236,15 @@ BarWidget {
     Process {
         id: stateProc
 
+        property bool again: false
+
         command: ["hyprctl", "-j", "getoption", "decoration:screen_shader"]
+        onExited: {
+            if (again) {
+                again = false;
+                running = true;
+            }
+        }
 
         stdout: StdioCollector {
             waitForEnd: true
@@ -243,7 +258,15 @@ BarWidget {
     Process {
         id: pluginProc
 
+        property bool again: false
+
         command: ["hyprctl", "-j", "plugin", "list"]
+        onExited: {
+            if (again) {
+                again = false;
+                running = true;
+            }
+        }
 
         stdout: StdioCollector {
             waitForEnd: true
@@ -257,7 +280,15 @@ BarWidget {
     Process {
         id: clientsProc
 
+        property bool again: false
+
         command: ["hyprctl", "-j", "clients"]
+        onExited: {
+            if (again) {
+                again = false;
+                running = true;
+            }
+        }
 
         stdout: StdioCollector {
             waitForEnd: true
