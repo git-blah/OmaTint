@@ -58,11 +58,11 @@ function fakeHyprland(active, alive) {
 
 function runTag(address, on) {
   return luaRoundTrip(
-    "(function() local got;" +
+    "(function() local got = {};" +
       "hl = { dsp = { window = { tag = function(t) return t end } }, " +
-      ' dispatch = function(t) got = t.tag .. "@" .. t.window end }; ' +
+      ' dispatch = function(t) got[#got + 1] = t.tag .. "@" .. t.window end }; ' +
       Lua.tagWindow(address, on) +
-      " return got end)()",
+      ' return table.concat(got,"|") end)()',
   );
 }
 
@@ -349,14 +349,25 @@ for (const [s, ans] of hyprAddressTestCase) {
   });
 }
 
-test("Tag test", () => {
-  assert.equal(runTag("0x2", true), "+widget.tint@address:0x2");
-  assert.equal(runTag("0x2", false), "-widget.tint@address:0x2");
+test("Tag test for exact : 0x2 true", () => {
+  assert.equal(
+    runTag("0x2", true),
+    "+widget.tint@address:0x2|+shader_fullscreen_stack:1@address:0x2",
+  );
+});
+test("Tag test for exact : 0x2 false", () => {
+  assert.equal(
+    runTag("0x2", false),
+    "-widget.tint@address:0x2|-shader_fullscreen_stack:1@address:0x2",
+  );
 });
 
 for (const s of HOSTILE) {
   test("Tag Test for :" + s, () => {
-    assert.equal(runTag(s, true), "+widget.tint@address:" + s);
+    assert.equal(
+      runTag(s, true),
+      "+widget.tint@address:" + s + "|+shader_fullscreen_stack:1@address:" + s,
+    );
   });
 }
 

@@ -51,14 +51,9 @@ function setClassShader(appId,path){
 }
 
 function tagWindow(address, on){
-    return(
-    'hl.dispatch(hl.dsp.window.tag({tag ='
-    + quote((on ? "+" : "-")
-    +"widget.tint")
-    +', window = '
-    +quote("address:"+address)
-    +'}))'
-    ) 
+    const tags = ["widget.tint", "shader_fullscreen_stack:1"]
+    
+    return(tags.map((tag)=>('hl.dispatch(hl.dsp.window.tag({ tag = ' + quote((on?'+':'-') + tag) + ', window = ' + quote("address:" + address) + '}))')).join(" "))
 }
 
 function windowsMarked(text){
