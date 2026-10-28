@@ -50,6 +50,30 @@ function setClassShader(appId,path){
     return 'hl.plugin.HyprWindowShade.classshader(' + quote(appId)+',' + quote(path) + ')'
 }
 
+function tagWindow(address, on){
+    const tags = ["widget.tint", "shader_fullscreen_stack:1"]
+    
+    return(tags.map((tag)=>('hl.dispatch(hl.dsp.window.tag({ tag = ' + quote((on?'+':'-') + tag) + ', window = ' + quote("address:" + address) + '}))')).join(" "))
+}
+
+function windowsMarked(text){
+    let marked = {}
+    try{
+        const windows = JSON.parse(text)
+        if(!Array.isArray(windows)) return {}
+        for (const win of windows){
+            if(Array.isArray(win?.tags) && win.tags.includes("widget.tint")){
+                marked[win.address] = true
+            }
+        }
+        return marked
+
+    } catch(err){
+        console.warn("widget.tint: error in marked windowsTags", text, err.message)
+        return {}
+    }
+}
+
 function setWindowShader(addr, path){
 
 return [
@@ -70,7 +94,6 @@ return [
     ].join(" ")
 }
 
-
 function windowShadeLoaded(text){
     try {
         const plugins = JSON.parse(text)
@@ -88,6 +111,10 @@ function windowShadeLoaded(text){
 
 }
 
+function notifyChanged(){
+    return ('hl.dispatch(hl.dsp.event("widget.tint"))')
+}
+
 if (typeof module !== "undefined") module.exports = {
     quote,
     hyprAddress,
@@ -95,5 +122,8 @@ if (typeof module !== "undefined") module.exports = {
     screenShaderActive,
     setClassShader,
     windowShadeLoaded,
-    setWindowShader
+    setWindowShader,
+    tagWindow,
+    windowsMarked,
+    notifyChanged
 }

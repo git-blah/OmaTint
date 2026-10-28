@@ -110,17 +110,22 @@ BarWidget {
         if (evalProc.running || root.evalQueue.length === 0)
             return ;
 
-        evalProc.command = ["hyprctl", "eval", root.evalQueue.shift()];
+        let code = root.evalQueue.shift();
+        if (root.evalQueue.length === 0)
+            code += " " + Lua.notifyChanged();
+
+        evalProc.command = ["hyprctl", "eval", code];
         evalProc.running = true;
     }
 
     function refreshState() {
-        stateProc.running = true;
-        pluginProc.running = true;
+        root.rerun(stateProc);
+        root.rerun(pluginProc);
+        root.rerun(clientsProc);
     }
 
     function setWindowShade(address, on) {
-        root.runEval(Lua.setWindowShader(address, on ? root.windowShaderPath : ""));
+        root.runEval(Lua.setWindowShader(address, on ? root.windowShaderPath : "") + " " + Lua.tagWindow(address, on));
         const obj = Object.assign({
         }, root.perWindowOn);
         if (on)
@@ -140,12 +145,19 @@ BarWidget {
         setWindowShade(address, !root.perWindowOn[address]);
     }
 
+    function rerun(proc) {
+        if (proc.running)
+            proc.again = true;
+        else
+            proc.running = true;
+    }
+
     function clearAllWindows() {
         if (Object.keys(root.perWindowOn).length === 0)
             return ;
 
         root.runEval(Object.keys(root.perWindowOn).map((addr) => {
-            return Lua.setWindowShader(addr, "");
+            return Lua.setWindowShader(addr, "") + " " + Lua.tagWindow(addr, false);
         }).join(" "));
         root.perWindowOn = ({
         });
@@ -171,12 +183,30 @@ BarWidget {
             root.perWindowOn = kept;
 
     }
+    onOpenedToggleChanged: {
+        if (root.openedToggle)
+            root.refreshState();
+
+    }
     moduleName: "widget.tint"
     implicitWidth: button.implicitWidth
     implicitHeight: button.implicitHeight
     Component.onCompleted: {
         mkdirProc.running = true;
         root.refreshState();
+    }
+
+    Connections {
+        function onRawEvent(event) {
+            if (["configreloaded"].includes(event.name))
+                root.refreshState();
+
+            if (event.name === "custom" && event.data === "widget.tint")
+                root.refreshState();
+
+        }
+
+        target: Hyprland
     }
 
     FolderListModel {
@@ -206,7 +236,15 @@ BarWidget {
     Process {
         id: stateProc
 
+        property bool again: false
+
         command: ["hyprctl", "-j", "getoption", "decoration:screen_shader"]
+        onExited: {
+            if (again) {
+                again = false;
+                running = true;
+            }
+        }
 
         stdout: StdioCollector {
             waitForEnd: true
@@ -220,12 +258,42 @@ BarWidget {
     Process {
         id: pluginProc
 
+        property bool again: false
+
         command: ["hyprctl", "-j", "plugin", "list"]
+        onExited: {
+            if (again) {
+                again = false;
+                running = true;
+            }
+        }
 
         stdout: StdioCollector {
             waitForEnd: true
             onStreamFinished: {
                 root.windowShaderLoaded = Lua.windowShadeLoaded(text);
+            }
+        }
+
+    }
+
+    Process {
+        id: clientsProc
+
+        property bool again: false
+
+        command: ["hyprctl", "-j", "clients"]
+        onExited: {
+            if (again) {
+                again = false;
+                running = true;
+            }
+        }
+
+        stdout: StdioCollector {
+            waitForEnd: true
+            onStreamFinished: {
+                root.perWindowOn = Lua.windowsMarked(text);
             }
         }
 
