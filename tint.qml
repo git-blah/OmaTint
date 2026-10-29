@@ -9,27 +9,18 @@ import qs.Ui
 import "shader.js" as Shader
 
 BarWidget {
-    // TODO: follow the selected shader + intensity like global does (see notes.md)
-
     id: root
 
     property bool globalOn: false
-    property real intensity: 1
     property int shaderIndex: 0
-    property int slot: 0
-    property real wheelAccumulator: 0
-    property string lastOut: ""
     property var evalQueue: []
     property var perWindowOn: ({
     })
     property bool windowShaderLoaded: false
     property bool openedToggle: false
-    readonly property string pluginDir: decodeURIComponent(String(Qt.resolvedUrl("."))).replace(/^file:\/\//, "").replace(/\/$/, "")
-    // Generated shaders live outside the plugin dir: the shell watches that
-    // dir recursively and would reload the widget on every write.
-    readonly property string outDir: Quickshell.env("XDG_RUNTIME_DIR") + "/widget-tint"
     readonly property string selectedShader: shaderList.count > 0 ? shaderList.get(shaderIndex % shaderList.count, "fileName") : ""
-    readonly property string windowShaderPath: decodeURIComponent(String(Qt.resolvedUrl("shaders/grayscale.glsl")).replace(/^file:\/\//, ""))
+    readonly property string pluginDir: decodeURIComponent(String(Qt.resolvedUrl("."))).replace(/^file:\/\//, "").replace(/\/$/, "")
+    readonly property string selectedShaderPath: selectedShader === "" ? "" : pluginDir + "/shaders/" + selectedShader
     readonly property var runningWindows: {
         const out = [];
         for (const t of Hyprland.toplevels.values) {
@@ -51,13 +42,7 @@ BarWidget {
     }
 
     function close() {
-        //KeyboardPanel calls owner.close() on an outside click
         root.openedToggle = false;
-    }
-
-    function setIntensity(v) {
-        root.intensity = Math.max(0, Math.min(1, v));
-        root.apply();
     }
 
     function selectShader(i) {
@@ -66,6 +51,7 @@ BarWidget {
 
         root.shaderIndex = (i + shaderList.count) % shaderList.count;
         root.apply();
+        root.reshadeAllWindows();
     }
 
     function toggleGlobal() {
@@ -80,21 +66,10 @@ BarWidget {
     }
 
     function apply() {
-        if (!root.globalOn || root.selectedShader === "")
+        if (!root.globalOn || root.selectedShaderPath === "")
             return ;
 
-        srcFile.path = root.pluginDir + "/shaders/" + root.selectedShader;
-        var out = Shader.withIntensity(srcFile.text(), root.intensity);
-        // FileView.setText skips identical text without emitting saved, so
-        // re-send the last file directly (e.g. toggling off and back on).
-        if (out === root.lastOut) {
-            root.sendShader(outFile.path);
-            return ;
-        }
-        root.lastOut = out;
-        root.slot = 1 - root.slot;
-        outFile.path = root.outDir + "/tint-" + (root.slot ? "b" : "a") + ".glsl";
-        outFile.setText(out);
+        root.sendShader(root.selectedShaderPath);
     }
 
     function sendShader(path) {
@@ -125,14 +100,14 @@ BarWidget {
     }
 
     function setWindowShade(address, on) {
-        root.runEval(Lua.setWindowShader(address, on ? root.windowShaderPath : "") + " " + Lua.tagWindow(address, on));
+        root.runEval(Lua.setWindowShader(address, on ? root.selectedShaderPath : "") + " " + Lua.tagWindow(address, on));
         const obj = Object.assign({
         }, root.perWindowOn);
         if (on)
             obj[address] = true;
         else
             delete obj[address];
-        root.perWindowOn = obj; // assign new object so binding notice.
+        root.perWindowOn = obj;
     }
 
     function toggleWindow(address) {
@@ -164,6 +139,15 @@ BarWidget {
         return ;
     }
 
+    function reshadeAllWindows() {
+        if (Object.keys(root.perWindowOn).length === 0)
+            return ;
+
+        root.runEval(Object.keys(root.perWindowOn).map((addr) => {
+            return Lua.setWindowShader(addr, root.selectedShaderPath);
+        }).join(" "));
+    }
+
     onRunningWindowsChanged: {
         var reassignFlag = false;
         var kept = ({
@@ -192,7 +176,6 @@ BarWidget {
     implicitWidth: button.implicitWidth
     implicitHeight: button.implicitHeight
     Component.onCompleted: {
-        mkdirProc.running = true;
         root.refreshState();
     }
 
@@ -215,22 +198,6 @@ BarWidget {
         folder: Qt.resolvedUrl("shaders")
         nameFilters: ["*.glsl"]
         showDirs: false
-    }
-
-    // blockLoading only makes the first load synchronous; after a path
-    // change text() would return the previous shader. Always read sync.
-    FileView {
-        id: srcFile
-
-        blockAllReads: true
-    }
-
-    FileView {
-        id: outFile
-
-        preload: false
-        atomicWrites: true
-        onSaved: root.sendShader(outFile.path)
     }
 
     Process {
@@ -320,12 +287,6 @@ BarWidget {
 
     }
 
-    Process {
-        id: mkdirProc
-
-        command: ["mkdir", "-p", root.outDir]
-    }
-
     BarIconButton {
         id: button
 
@@ -333,7 +294,7 @@ BarWidget {
         bar: root.bar
         text: ""
         dimmed: !root.globalOn
-        tooltipText: root.globalOn ? Shader.displayName(root.selectedShader) + " · " + Math.round(root.intensity * 100) + "% \nMiddle-click:change tint" : "Turn Tint ON"
+        tooltipText: root.globalOn ? Shader.displayName(root.selectedShader) + "\nMiddle-click:change tint" : "Turn Tint ON"
         onPressed: function(b) {
             if (b === Qt.LeftButton)
                 root.toggleGlobal();
@@ -341,13 +302,6 @@ BarWidget {
                 root.openedToggle = !root.openedToggle;
             else if (b === Qt.MiddleButton)
                 root.selectShader(root.shaderIndex + 1);
-        }
-        onWheelMoved: function(delta) {
-            var w = Util.wheelSteps(root.wheelAccumulator, delta);
-            root.wheelAccumulator = w.remainder;
-            if (w.steps !== 0)
-                root.setIntensity(root.intensity + w.steps * 0.05);
-
         }
     }
 
