@@ -11,5 +11,5 @@ new Function("module", src)(module);
 const Shader = module.exports;
 
 test("displayName", () => {
-  assert.equal(Shader.displayName("nightlight.glsl"), "nightlight");
+  assert.equal(Shader.displayName("nightlight.glsl"), "Nightlight");
 });

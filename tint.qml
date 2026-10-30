@@ -3,6 +3,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Hyprland
 import Quickshell.Io
+import Quickshell.Wayland
 import "lua.js" as Lua
 import qs.Commons
 import qs.Ui
@@ -22,6 +23,9 @@ BarWidget {
     readonly property string pluginDir: decodeURIComponent(String(Qt.resolvedUrl("."))).replace(/^file:\/\//, "").replace(/\/$/, "")
     readonly property string selectedShaderPath: selectedShader === "" ? "" : pluginDir + "/shaders/" + selectedShader
     readonly property var runningWindows: {
+        // Touching ToplevelManager starts the wayland toplevel protocol, which
+        // is what fills in t.wayland; it also re-runs this binding as it does.
+        ToplevelManager.toplevels.values;
         const out = [];
         for (const t of Hyprland.toplevels.values) {
             const address = Lua.hyprAddress(t.address);
@@ -29,8 +33,9 @@ BarWidget {
                 continue;
 
             const title = t.title;
-            const appId = t.wayland ? t.wayland.appId : "";
-            const icon = appId ? Quickshell.iconPath(appId, true) : "";
+            const ipc = t.lastIpcObject || {};
+            const appId = (t.wayland && t.wayland.appId) || ipc.class || "";
+            const icon = iconForAppId(appId);
             out.push({
                 "address": address,
                 "title": title,
@@ -43,6 +48,39 @@ BarWidget {
 
     function close() {
         root.openedToggle = false;
+    }
+
+    // A desktop entry's Icon= may be a theme name or an absolute path.
+    function resolveIcon(value) {
+        const v = String(value || "");
+        if (v === "")
+            return "";
+
+        if (v.startsWith("file://") || v.startsWith("image://"))
+            return v;
+
+        if (v.startsWith("/"))
+            return "file://" + v;
+
+        return Quickshell.iconPath(v, true);
+    }
+
+    // Desktop entry icon first, then the appId as a theme icon name, then a
+    // generic app icon so every row has something.
+    function iconForAppId(appId) {
+        const id = String(appId || "");
+        if (id !== "") {
+            const entry = DesktopEntries.heuristicLookup(id);
+            const fromEntry = entry ? resolveIcon(entry.icon) : "";
+            if (fromEntry !== "")
+                return fromEntry;
+
+            const direct = Quickshell.iconPath(id, true);
+            if (direct !== "")
+                return direct;
+
+        }
+        return Quickshell.iconPath("application-x-executable", true);
     }
 
     function selectShader(i) {
@@ -321,6 +359,75 @@ BarWidget {
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.top: parent.top
+
+            PanelSectionHeader {
+                text: "Shader Selection"
+                foreground: root.bar ? root.bar.barForeground : Color.foreground
+                fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
+            }
+
+            Text {
+                visible: shaderList.count === 0
+                text: "No shader available in shaders/."
+                color: root.bar ? root.bar.barForeground : Color.foreground
+                font.family: root.bar ? root.bar.fontFamily : Style.font.family
+                font.pixelSize: Style.font.body
+                font.italic: true
+                textFormat: Text.PlainText
+                wrapMode: Text.WordWrap
+                width: list.width
+            }
+
+            Repeater {
+                model: shaderList
+
+                delegate: Item {
+                    id: shaderItem
+
+                    required property int index
+                    required property string fileName
+
+                    width: list.width
+                    height: shaderRow.implicitHeight
+
+                    CursorSurface {
+                        id: shaderRow
+
+                        width: parent.width
+                        implicitHeight: shaderLabel.implicitHeight + Style.space(14)
+                        hasCursor: shaderMouseArea.containsMouse
+                        current: root.shaderIndex === shaderItem.index
+
+                        Text {
+                            id: shaderLabel
+
+                            anchors.verticalCenter: parent.verticalCenter
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.leftMargin: Style.space(8)
+                            anchors.rightMargin: Style.space(8)
+                            textFormat: Text.PlainText
+                            elide: Text.ElideRight
+                            text: Shader.displayName(shaderItem.fileName)
+                            color: root.bar ? root.bar.barForeground : Color.foreground
+                            font.family: root.bar ? root.bar.fontFamily : Style.font.family
+                            font.pixelSize: Style.font.body
+                        }
+
+                        MouseArea {
+                            id: shaderMouseArea
+
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.selectShader(shaderItem.index)
+                        }
+
+                    }
+
+                }
+
+            }
 
             PanelSectionHeader {
                 text: "Per Window Shade"

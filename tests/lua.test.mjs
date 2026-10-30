@@ -49,7 +49,9 @@ function fakeHyprland(active, alive) {
     "}) do alive[a] = true end; " +
     "hl = { " +
     "  get_active_window = function() return active and { address = active } or nil end, " +
-    "  dsp = { focus = function(t) return t.window end }, " +
+    "  get_cursor_pos = function() return { x = 1, y = 2 } end, " +
+    "  dsp = { focus = function(t) return t.window end, " +
+    '    cursor = { move = function(t) return "cursor:" .. t.x .. "," .. t.y end } }, ' +
     '  dispatch = function(sel) local a = sel:match("^address:(.*)$"); if a and alive[a] then active = a end end, ' +
     "  plugin = { HyprWindowShade = { togglewindowshader = function(p) calls[#calls + 1] = p end } } " +
     "}; "
