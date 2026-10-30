@@ -79,6 +79,7 @@ function setWindowShader(addr, path){
 return [
     "do", 
         "local back = hl.get_active_window()",
+        "local cursor = hl.get_cursor_pos()",
         `hl.dispatch(hl.dsp.focus({ window = ${quote("address:"+addr)}}))`,
         "local now = hl.get_active_window()",      
         `if now and now.address == ${quote(addr)}`, 
@@ -88,7 +89,9 @@ return [
             path ? `shade.togglewindowshader(${quote(path)})` : "",
         "end",        
         "if back", 
-        "then hl.dispatch(hl.dsp.focus({ window = \"address:\" .. back.address }))", 
+        "then", 
+            "hl.dispatch(hl.dsp.focus({ window = \"address:\" .. back.address }))",
+            "hl.dispatch(hl.dsp.cursor.move({ x = cursor.x, y = cursor.y }))", 
         "end",
     "end"
     ].join(" ")
