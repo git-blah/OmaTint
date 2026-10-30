@@ -1,9 +1,9 @@
 .pragma library
 
 function displayName(fileName){
-    var string = fileName.charAt(0).toUpperCase() + fileName.slice(1)
-    
-    return String(string).replace(/\.glsl$/, "")
+    const name = String(fileName)
+
+    return (name.charAt(0).toUpperCase() + name.slice(1)).replace(/\.glsl$/, "")
 }
 
 if (typeof module !== "undefined") module.exports = {displayName }

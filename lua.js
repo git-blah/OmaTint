@@ -1,5 +1,10 @@
 .pragma library
 
+// Hyprland window tag marking a window this widget has tinted.
+const TINT_TAG = "window_tint"
+// Custom Hyprland event sent after each change so every instance refreshes.
+const REFRESH_EVENT = "omaTint"
+
 function quote(value){
     const s = String(value)
     let out = ""
@@ -20,7 +25,7 @@ function quote(value){
     return '"' + out + '"';
 }
 
-function hyprAddress(value){
+function normalizeAddress(value){
     const str = String(value)
     if (str === "") return "";
     if (/^0x[0-9a-f]+$/i.test(str)) return str;
@@ -32,12 +37,12 @@ function setScreenShader(path){
     return 'hl.config({decoration = {screen_shader = ' + quote(path) + '}})'
 }
 
-function screenShaderActive(text){
+function parseScreenShaderActive(text){
     try {
         const str = JSON.parse(text)?.str
         return typeof str === "string" && str !== "" && str !== "[[EMPTY]]";
     } catch(e) {
-        console.warn("widget.tint:bad hyprctl output:",text,e.message)
+        console.warn("omaTint: bad getoption output:", text, e.message)
         return false
     }
 
@@ -51,38 +56,38 @@ function setClassShader(appId,path){
 }
 
 function tagWindow(address, on){
-    const tags = ["widget.tint", "shader_fullscreen_stack:1"]
+    const tags = [TINT_TAG, "shader_fullscreen_stack:1"]
     
     return(tags.map((tag)=>('hl.dispatch(hl.dsp.window.tag({ tag = ' + quote((on?'+':'-') + tag) + ', window = ' + quote("address:" + address) + '}))')).join(" "))
 }
 
-function windowsMarked(text){
-    let marked = {}
+function parseTintedWindows(text){
+    let tinted = {}
     try{
         const windows = JSON.parse(text)
         if(!Array.isArray(windows)) return {}
         for (const win of windows){
-            if(Array.isArray(win?.tags) && win.tags.includes("widget.tint")){
-                marked[win.address] = true
+            if(Array.isArray(win?.tags) && win.tags.includes(TINT_TAG)){
+                tinted[win.address] = true
             }
         }
-        return marked
+        return tinted
 
     } catch(err){
-        console.warn("widget.tint: error in marked windowsTags", text, err.message)
+        console.warn("omaTint: bad clients output:", text, err.message)
         return {}
     }
 }
 
-function setWindowShader(addr, path){
+function setWindowShader(address, path){
 
 return [
     "do", 
         "local back = hl.get_active_window()",
         "local cursor = hl.get_cursor_pos()",
-        `hl.dispatch(hl.dsp.focus({ window = ${quote("address:"+addr)}}))`,
+        `hl.dispatch(hl.dsp.focus({ window = ${quote("address:" + address)}}))`,
         "local now = hl.get_active_window()",      
-        `if now and now.address == ${quote(addr)}`, 
+        `if now and now.address == ${quote(address)}`, 
         "then",
             "local shade = hl.plugin.HyprWindowShade",
             "shade.togglewindowshader(\"clear\")",
@@ -97,7 +102,7 @@ return [
     ].join(" ")
 }
 
-function windowShadeLoaded(text){
+function parseWindowShadeLoaded(text){
     try {
         const plugins = JSON.parse(text)
         
@@ -108,25 +113,27 @@ function windowShadeLoaded(text){
         )
         
     } catch (error) {
-        console.warn("widget.tint: bad input in windowShadeLoaded",text,error.message)
+        console.warn("omaTint: bad plugin list output:", text, error.message)
         return false
     }
 
 }
 
 function notifyChanged(){
-    return ('hl.dispatch(hl.dsp.event("widget.tint"))')
+    return 'hl.dispatch(hl.dsp.event(' + quote(REFRESH_EVENT) + '))'
 }
 
 if (typeof module !== "undefined") module.exports = {
+    TINT_TAG,
+    REFRESH_EVENT,
     quote,
-    hyprAddress,
+    normalizeAddress,
     setScreenShader,
-    screenShaderActive,
+    parseScreenShaderActive,
     setClassShader,
-    windowShadeLoaded,
+    parseWindowShadeLoaded,
     setWindowShader,
     tagWindow,
-    windowsMarked,
+    parseTintedWindows,
     notifyChanged
 }

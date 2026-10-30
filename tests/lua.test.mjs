@@ -83,7 +83,7 @@ for (const s of HOSTILE) {
   });
 }
 
-test("ShaderUtility test", () => {
+test("setScreenShader exact output", () => {
   assert.equal(
     Lua.setScreenShader("/a/gray.glsl"),
     'hl.config({decoration = {screen_shader = "/a/gray.glsl"}})',
@@ -98,15 +98,15 @@ test("ShaderUtility test", () => {
   );
 });
 
-test("Shader State parsing", () => {
-  assert.equal(Lua.screenShaderActive('{"str":"/a/gray.glsl"}'), true);
-  assert.equal(Lua.screenShaderActive('{"str":"[[EMPTY]]"}'), false);
-  assert.equal(Lua.screenShaderActive('{"str":42}'), false);
-  assert.equal(Lua.screenShaderActive('{"str":null}'), false);
-  assert.equal(Lua.screenShaderActive('{"other":"value"}'), false);
-  assert.equal(Lua.screenShaderActive('{"str":""}'), false);
-  assert.equal(Lua.screenShaderActive(""), false);
-  assert.equal(Lua.screenShaderActive("not json"), false);
+test("parseScreenShaderActive basic cases", () => {
+  assert.equal(Lua.parseScreenShaderActive('{"str":"/a/gray.glsl"}'), true);
+  assert.equal(Lua.parseScreenShaderActive('{"str":"[[EMPTY]]"}'), false);
+  assert.equal(Lua.parseScreenShaderActive('{"str":42}'), false);
+  assert.equal(Lua.parseScreenShaderActive('{"str":null}'), false);
+  assert.equal(Lua.parseScreenShaderActive('{"other":"value"}'), false);
+  assert.equal(Lua.parseScreenShaderActive('{"str":""}'), false);
+  assert.equal(Lua.parseScreenShaderActive(""), false);
+  assert.equal(Lua.parseScreenShaderActive("not json"), false);
 });
 
 test("quote exact escapes", () => {
@@ -152,28 +152,28 @@ test("setScreenShader output is a single line", () => {
   assert.doesNotMatch(Lua.setScreenShader("a\nb\r\nc"), /[\r\n]/);
 });
 
-test("screenShaderActive edge cases", (t) => {
+test("parseScreenShaderActive edge cases", (t) => {
   const warn = t.mock.method(console, "warn", () => {});
-  assert.equal(Lua.screenShaderActive('{"str":" "}'), true);
-  assert.equal(Lua.screenShaderActive('{"str":"[[EMPTY]] "}'), true);
+  assert.equal(Lua.parseScreenShaderActive('{"str":" "}'), true);
+  assert.equal(Lua.parseScreenShaderActive('{"str":"[[EMPTY]] "}'), true);
   assert.equal(
-    Lua.screenShaderActive('{"str":"/a/gray.glsl","set":true}'),
+    Lua.parseScreenShaderActive('{"str":"/a/gray.glsl","set":true}'),
     true,
   );
-  assert.equal(Lua.screenShaderActive('{"str":true}'), false);
-  assert.equal(Lua.screenShaderActive('{"str":["/a/gray.glsl"]}'), false);
-  assert.equal(Lua.screenShaderActive("[]"), false);
-  assert.equal(Lua.screenShaderActive("42"), false);
-  assert.equal(Lua.screenShaderActive("null"), false);
-  assert.equal(Lua.screenShaderActive(undefined), false);
+  assert.equal(Lua.parseScreenShaderActive('{"str":true}'), false);
+  assert.equal(Lua.parseScreenShaderActive('{"str":["/a/gray.glsl"]}'), false);
+  assert.equal(Lua.parseScreenShaderActive("[]"), false);
+  assert.equal(Lua.parseScreenShaderActive("42"), false);
+  assert.equal(Lua.parseScreenShaderActive("null"), false);
+  assert.equal(Lua.parseScreenShaderActive(undefined), false);
 });
 
-test("screenShaderActive warns only on unparseable output", (t) => {
+test("parseScreenShaderActive warns only on unparseable output", (t) => {
   const warn = t.mock.method(console, "warn", () => {});
-  Lua.screenShaderActive('{"str":"/a/gray.glsl"}');
-  Lua.screenShaderActive('{"str":"[[EMPTY]]"}');
+  Lua.parseScreenShaderActive('{"str":"/a/gray.glsl"}');
+  Lua.parseScreenShaderActive('{"str":"[[EMPTY]]"}');
   assert.equal(warn.mock.callCount(), 0);
-  Lua.screenShaderActive("not json");
+  Lua.parseScreenShaderActive("not json");
   assert.equal(warn.mock.callCount(), 1);
   assert.equal(warn.mock.calls[0].arguments[1], "not json");
 });
@@ -198,26 +198,26 @@ test("quote stringifies objects and arrays", () => {
   assert.equal(Lua.quote(["/a", "/b"]), '"/a,/b"');
 });
 
-test("screenShaderActive handles real hyprctl output", () => {
+test("parseScreenShaderActive handles real hyprctl output", () => {
   assert.equal(
-    Lua.screenShaderActive(
+    Lua.parseScreenShaderActive(
       '{"option":"decoration:screen_shader","str":"/a/gray.glsl","set":true}\n',
     ),
     true,
   );
   assert.equal(
-    Lua.screenShaderActive(
+    Lua.parseScreenShaderActive(
       '{"option":"decoration:screen_shader","str":"[[EMPTY]]","set":false}\n',
     ),
     false,
   );
 });
 
-test("screenShaderActive rejects an object instead of text", () => {
-  assert.equal(Lua.screenShaderActive({ str: "/a/gray.glsl" }), false);
+test("parseScreenShaderActive rejects an object instead of text", () => {
+  assert.equal(Lua.parseScreenShaderActive({ str: "/a/gray.glsl" }), false);
 });
 
-const windowShadeLoadCases = [
+const parseWindowShadeLoadedCases = [
   ['[{"name":"HyprWindowShade"}]', true],
   ["", false],
   ["[]", false],
@@ -227,10 +227,10 @@ const windowShadeLoadCases = [
   ["{}", false],
   ["null", false],
 ];
-for (const [input, expected] of windowShadeLoadCases) {
-  test("windowShadeLoaded(" + JSON.stringify(input) + ")", (t) => {
+for (const [input, expected] of parseWindowShadeLoadedCases) {
+  test("parseWindowShadeLoaded(" + JSON.stringify(input) + ")", (t) => {
     t.mock.method(console, "warn", () => {});
-    assert.equal(Lua.windowShadeLoaded(input), expected);
+    assert.equal(Lua.parseWindowShadeLoaded(input), expected);
   });
 }
 
@@ -254,7 +254,7 @@ test("setClassShader exact output", () => {
 });
 
 for (const s of HOSTILE) {
-  test("setClassShader run for appId : " + JSON.stringify(s), () => {
+  test("setClassShader runs for appId " + JSON.stringify(s), () => {
     const out = luaRoundTrip(
       "(function() local n, r = 0; hl = { plugin = { HyprWindowShade = { classshader = function(id, path) n=n+1; r = id end } } }; " +
         Lua.setClassShader(s, "/a/g.glsl") +
@@ -262,7 +262,7 @@ for (const s of HOSTILE) {
     );
     if (out !== null) assert.equal(out, s);
   });
-  test("setClassShader run for path : " + JSON.stringify(s), () => {
+  test("setClassShader runs for path " + JSON.stringify(s), () => {
     const out = luaRoundTrip(
       "(function() local n, r = 0; hl = { plugin = { HyprWindowShade = { classshader = function(id, path) n=n+1; r = path end } } }; " +
         Lua.setClassShader("foot", s) +
@@ -272,7 +272,7 @@ for (const s of HOSTILE) {
   });
 }
 
-test('setClassShader run for path : "clear" ', () => {
+test('setClassShader runs for path "clear"', () => {
   const out = luaRoundTrip(
     "(function() local n, r = 0; hl = { plugin = { HyprWindowShade = { classshader = function(id, path) n=n+1; r = path end } } }; " +
       Lua.setClassShader("foot", "") +
@@ -335,7 +335,7 @@ for (const s of HOSTILE) {
   });
 }
 
-const hyprAddressTestCase = [
+const normalizeAddressCases = [
   ["", ""],
   ["563e8f5eae30", "0x563e8f5eae30"],
   ["0x563e8f5eae30", "0x563e8f5eae30"],
@@ -345,40 +345,40 @@ const hyprAddressTestCase = [
   ["0x", ""],
 ];
 
-for (const [s, ans] of hyprAddressTestCase) {
-  test("testing hyprAddress for: " + JSON.stringify(s), () => {
-    assert.equal(Lua.hyprAddress(s), ans);
+for (const [s, ans] of normalizeAddressCases) {
+  test("normalizeAddress " + JSON.stringify(s), () => {
+    assert.equal(Lua.normalizeAddress(s), ans);
   });
 }
 
-test("Tag test for exact : 0x2 true", () => {
+test("tagWindow adds both tags", () => {
   assert.equal(
     runTag("0x2", true),
-    "+widget.tint@address:0x2|+shader_fullscreen_stack:1@address:0x2",
+    "+window_tint@address:0x2|+shader_fullscreen_stack:1@address:0x2",
   );
 });
-test("Tag test for exact : 0x2 false", () => {
+test("tagWindow removes both tags", () => {
   assert.equal(
     runTag("0x2", false),
-    "-widget.tint@address:0x2|-shader_fullscreen_stack:1@address:0x2",
+    "-window_tint@address:0x2|-shader_fullscreen_stack:1@address:0x2",
   );
 });
 
 for (const s of HOSTILE) {
-  test("Tag Test for :" + s, () => {
+  test("tagWindow handles hostile address " + JSON.stringify(s), () => {
     assert.equal(
       runTag(s, true),
-      "+widget.tint@address:" + s + "|+shader_fullscreen_stack:1@address:" + s,
+      "+window_tint@address:" + s + "|+shader_fullscreen_stack:1@address:" + s,
     );
   });
 }
 
-const testWindowsTags = [
-  ['[{"address":"0x1","tags":["widget.tint"]}]', { "0x1": true }],
+const parseTintedWindowsCases = [
+  ['[{"address":"0x1","tags":["window_tint"]}]', { "0x1": true }],
   ['[{"address":"0x1","tags":["default-opacity*"]}]', {}],
-  ['[{"address":"0x1","tags":["widget.tint*"]}]', {}],
+  ['[{"address":"0x1","tags":["window_tint*"]}]', {}],
   [
-    '[{"address":"0x1","tags":["widget.tint"]},{"address":"0x2","tags":[]}]',
+    '[{"address":"0x1","tags":["window_tint"]},{"address":"0x2","tags":[]}]',
     { "0x1": true },
   ],
   ["[]", {}],
@@ -386,12 +386,12 @@ const testWindowsTags = [
   ['[{"address":"0x1"}]', {}],
 ];
 
-for (const [windows, ans] of testWindowsTags) {
-  test("windowsMarked( " + JSON.stringify(windows) + ")", () => {
-    assert.deepEqual(Lua.windowsMarked(windows), ans);
+for (const [windows, ans] of parseTintedWindowsCases) {
+  test("parseTintedWindows(" + JSON.stringify(windows) + ")", () => {
+    assert.deepEqual(Lua.parseTintedWindows(windows), ans);
   });
 }
 
-test("notify : ", () => {
-  assert.equal(Lua.notifyChanged(), 'hl.dispatch(hl.dsp.event("widget.tint"))');
+test("notifyChanged sends the refresh event", () => {
+  assert.equal(Lua.notifyChanged(), 'hl.dispatch(hl.dsp.event("omaTint"))');
 });

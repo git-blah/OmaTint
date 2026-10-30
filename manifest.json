@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "id": "widget.tint",
-  "name": "Tint",
+  "id": "omaTint",
+  "name": "omaTint",
   "version": "0.1.0",
   "author": "blah",
   "license" :"MIT",
@@ -13,7 +13,7 @@
     "barWidget": "tint.qml"
   },
   "barWidget": {
-    "displayName": "Tint",
+    "displayName": "omaTint",
     "description": "Customize screen with colors tints(grayscale, warmlight) for perfect visual atmosphere",
     "category": "Appearance",
     "allowMultiple": false,
