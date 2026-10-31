@@ -139,7 +139,7 @@ BarWidget {
         bar: root.bar
         text: ""
         dimmed: !root.screenTintOn
-        tooltipText: root.screenTintOn ? Shader.displayName(root.selectedShaderFile) + "\nMiddle-click: next shader" : "Turn tint on"
+        tooltipText: root.screenTintOn ? Shader.displayName(root.selectedShaderFile) + " · middle-click: next tint · right-click: tint windows" : "Tint off · click to turn on · right-click: tint windows"
         onPressed: function(b) {
             if (b === Qt.LeftButton)
                 root.service && root.service.toggleScreenTint();
@@ -199,14 +199,14 @@ BarWidget {
                     spacing: root.sectionGap
 
                     PanelSectionHeader {
-                        text: "SHADER"
+                        text: "TINT"
                         foreground: root.foreground
                         fontFamily: root.fontFamily
                     }
 
                     Text {
                         visible: root.shaderCount === 0
-                        text: "No shaders found in shaders/."
+                        text: "No tints found. Add a .glsl file to shaders/."
                         color: root.mutedForeground
                         font.family: root.fontFamily
                         font.pixelSize: Style.font.bodySmall
@@ -258,7 +258,7 @@ BarWidget {
 
                             anchors.left: parent.left
                             anchors.verticalCenter: parent.verticalCenter
-                            text: "PER-WINDOW TINT"
+                            text: "TINT WINDOWS"
                             foreground: root.foreground
                             fontFamily: root.fontFamily
                         }
@@ -291,7 +291,7 @@ BarWidget {
 
                     Text {
                         visible: !root.windowShadeLoaded
-                        text: "Per-window tint needs the HyprWindowShade plugin. See the README."
+                        text: "Per-window tint needs the HyprWindowShade Hyprland plugin."
                         color: root.mutedForeground
                         font.family: root.fontFamily
                         font.pixelSize: Style.font.bodySmall
@@ -302,7 +302,7 @@ BarWidget {
 
                     Text {
                         visible: root.windowsEditable
-                        text: root.runningWindows.length === 0 ? "No windows open." : "Pick a shader, then click a window."
+                        text: root.runningWindows.length === 0 ? "No windows open" : "Pick a tint, then click a window."
                         color: root.mutedForeground
                         font.family: root.fontFamily
                         font.pixelSize: Style.font.bodySmall
@@ -364,7 +364,7 @@ BarWidget {
                                 anchors.centerIn: parent
                                 width: parent.width - Style.space(24)
                                 horizontalAlignment: Text.AlignHCenter
-                                text: "Screen tint is on. Window tints are kept and come back when it's off."
+                                text: "Whole screen is tinted. Turn it off to tint single windows. Window tints are kept."
                                 color: root.foreground
                                 font.family: root.fontFamily
                                 font.pixelSize: Style.font.bodySmall
