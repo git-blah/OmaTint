@@ -1,15 +1,15 @@
 {
   "schemaVersion": 1,
-  "id": "git-blah.omaTint",
+  "id": "io.github.git-blah.omatint",
   "name": "omaTint",
   "version": "1.0.0",
-  "author": "git-blah",
+  "author": "priyankar tejwan",
   "license": "MIT",
   "description": "Tint the whole screen or single windows (grayscale, night light).",
   "kinds": ["service", "bar-widget"],
   "entryPoints": {
     "service": "Service.qml",
-    "barWidget": "tint.qml"
+    "barWidget": "BarWidget.qml"
   },
   "barWidget": {
     "displayName": "omaTint",

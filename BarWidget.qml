@@ -125,7 +125,7 @@ BarWidget {
             root.service.refreshState();
 
     }
-    moduleName: "git-blah.omaTint"
+    moduleName: "io.github.git-blah.omatint"
     implicitWidth: button.implicitWidth
     implicitHeight: button.implicitHeight
 
