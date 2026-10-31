@@ -20,13 +20,11 @@ BarWidget {
     readonly property var runningWindows: service ? service.runningWindows : []
     readonly property bool windowsEditable: windowShadeLoaded && !screenTintOn
     property bool panelOpen: false
-
     readonly property color foreground: bar ? bar.barForeground : Color.foreground
     readonly property color mutedForeground: Qt.darker(foreground, 1.4)
     readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
     readonly property int rowGap: Style.space(2)
     readonly property int sectionGap: Style.space(6)
-
     property bool cursorActive: false
     property string cursorKind: "screen"
     property string cursorKey: ""
@@ -61,7 +59,6 @@ BarWidget {
         }
         return stops;
     }
-
     readonly property bool opened: panelOpen
 
     function open() {
@@ -128,7 +125,7 @@ BarWidget {
             root.service.refreshState();
 
     }
-    moduleName: "omaTint"
+    moduleName: "git-blah.omaTint"
     implicitWidth: button.implicitWidth
     implicitHeight: button.implicitHeight
 
