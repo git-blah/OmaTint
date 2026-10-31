@@ -18,14 +18,113 @@ BarWidget {
     readonly property int shaderCount: shaderList ? shaderList.count : 0
     readonly property string selectedShaderFile: service ? service.selectedShaderFile : ""
     readonly property var runningWindows: service ? service.runningWindows : []
+    readonly property bool windowsEditable: windowShadeLoaded && !screenTintOn
     property bool panelOpen: false
+
+    readonly property color foreground: bar ? bar.barForeground : Color.foreground
+    readonly property color mutedForeground: Qt.darker(foreground, 1.4)
+    readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
+    readonly property int rowGap: Style.space(2)
+    readonly property int sectionGap: Style.space(6)
+
+    property bool cursorActive: false
+    property string cursorKind: "screen"
+    property string cursorKey: ""
+    property int lastCursorIndex: 0
+    readonly property int cursorIndex: cursorStops.findIndex((s) => {
+        return s.kind === cursorKind && s.key === cursorKey;
+    })
+    readonly property var cursorStops: {
+        const stops = [{
+            "kind": "screen",
+            "key": ""
+        }];
+        for (let i = 0; i < root.shaderCount; i++) {
+            stops.push({
+                "kind": "shader",
+                "key": String(i)
+            });
+        }
+        if (root.windowsEditable) {
+            if (root.hasTintedWindows)
+                stops.push({
+                "kind": "clear",
+                "key": ""
+            });
+
+            for (const w of root.runningWindows) {
+                stops.push({
+                    "kind": "window",
+                    "key": w.address
+                });
+            }
+        }
+        return stops;
+    }
+
+    readonly property bool opened: panelOpen
+
+    function open() {
+        root.panelOpen = true;
+    }
 
     function close() {
         root.panelOpen = false;
     }
 
+    function hasCursor(kind, key) {
+        return root.cursorActive && root.cursorIndex >= 0 && root.cursorKind === kind && root.cursorKey === (key || "");
+    }
+
+    function setCursor(kind, key) {
+        root.cursorKind = kind;
+        root.cursorKey = key || "";
+        root.cursorActive = true;
+    }
+
+    function setCursorAt(i) {
+        const stop = root.cursorStops[Math.max(0, Math.min(root.cursorStops.length - 1, i))];
+        if (stop)
+            root.setCursor(stop.kind, stop.key);
+
+    }
+
+    function moveCursor(delta) {
+        if (!root.cursorActive) {
+            root.cursorActive = true;
+            return ;
+        }
+        root.setCursorAt((root.cursorIndex >= 0 ? root.cursorIndex : root.lastCursorIndex) + delta);
+    }
+
+    function activateCursor() {
+        const stop = root.cursorStops[root.cursorIndex];
+        if (!root.cursorActive || !stop || !root.service)
+            return ;
+
+        if (stop.kind === "screen")
+            root.service.toggleScreenTint();
+        else if (stop.kind === "shader")
+            root.service.selectShader(Number(stop.key));
+        else if (stop.kind === "clear")
+            root.service.clearWindowTints();
+        else if (stop.kind === "window")
+            root.service.toggleWindowTint(stop.key);
+    }
+
+    onCursorIndexChanged: {
+        if (root.cursorIndex >= 0)
+            root.lastCursorIndex = root.cursorIndex;
+
+    }
     onPanelOpenChanged: {
-        if (root.panelOpen && root.service)
+        if (!root.panelOpen)
+            return ;
+
+        root.cursorActive = false;
+        root.cursorKind = "screen";
+        root.cursorKey = "";
+        if (root.service)
             root.service.refreshState();
 
     }
@@ -58,268 +157,338 @@ BarWidget {
         bar: root.bar
         owner: root
         open: root.panelOpen
+        focusTarget: keyCatcher
         contentHeight: panel.fittedContentHeight(list.implicitHeight)
-        contentWidth: panel.fittedContentWidth(Style.space(260))
+        contentWidth: panel.fittedContentWidth(Style.space(340))
 
-        Column {
-            id: list
+        PanelKeyCatcher {
+            id: keyCatcher
 
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.top: parent.top
+            anchors.fill: parent
+            onMoveRequested: function(dx, dy) {
+                if (dy !== 0)
+                    root.moveCursor(dy);
 
-            PanelSectionHeader {
-                text: "Shader"
-                foreground: root.bar ? root.bar.barForeground : Color.foreground
-                fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
             }
+            onActivateRequested: root.activateCursor()
+            onCloseRequested: root.close()
 
-            Text {
-                visible: root.shaderCount === 0
-                text: "No shader available in shaders/."
-                color: root.bar ? root.bar.barForeground : Color.foreground
-                font.family: root.bar ? root.bar.fontFamily : Style.font.family
-                font.pixelSize: Style.font.body
-                font.italic: true
-                textFormat: Text.PlainText
-                wrapMode: Text.WordWrap
-                width: list.width
-            }
+            Column {
+                id: list
 
-            Repeater {
-                model: root.shaderList
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.top: parent.top
+                spacing: Style.space(14)
 
-                delegate: Item {
-                    id: shaderItem
-
-                    required property int index
-                    required property string fileName
-
-                    width: list.width
-                    height: shaderRow.implicitHeight
-
-                    CursorSurface {
-                        id: shaderRow
-
-                        width: parent.width
-                        implicitHeight: shaderLabel.implicitHeight + Style.space(14)
-                        hasCursor: shaderMouseArea.containsMouse
-                        current: root.shaderIndex === shaderItem.index
-
-                        Text {
-                            id: shaderLabel
-
-                            anchors.verticalCenter: parent.verticalCenter
-                            anchors.left: parent.left
-                            anchors.right: parent.right
-                            anchors.leftMargin: Style.space(8)
-                            anchors.rightMargin: Style.space(8)
-                            textFormat: Text.PlainText
-                            elide: Text.ElideRight
-                            text: Shader.displayName(shaderItem.fileName)
-                            color: root.bar ? root.bar.barForeground : Color.foreground
-                            font.family: root.bar ? root.bar.fontFamily : Style.font.family
-                            font.pixelSize: Style.font.body
-                        }
-
-                        MouseArea {
-                            id: shaderMouseArea
-
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: root.service && root.service.selectShader(shaderItem.index)
-                        }
-
-                    }
-
+                PanelHero {
+                    title: "omaTint"
+                    meta: root.screenTintOn ? "Screen tint · " + Shader.displayName(root.selectedShaderFile) : "Screen tint off"
+                    foreground: root.foreground
+                    fontFamily: root.fontFamily
+                    iconComponent: heroIcon
+                    trailingControl: screenSwitch
                 }
 
-            }
-
-            Item {
-                width: list.width
-                height: Math.max(windowHeader.implicitHeight, clearAllButton.visible ? clearAllButton.implicitHeight : 0)
-
-                PanelSectionHeader {
-                    id: windowHeader
-
-                    anchors.left: parent.left
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: "Per-Window Tint"
-                    foreground: root.bar ? root.bar.barForeground : Color.foreground
-                    fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
+                PanelSeparator {
+                    foreground: root.foreground
                 }
-
-                Button {
-                    id: clearAllButton
-
-                    visible: root.windowShadeLoaded
-                    enabled: root.hasTintedWindows && !root.screenTintOn
-                    opacity: enabled ? 1 : 0.4
-                    anchors.right: parent.right
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: "Clear all"
-                    tooltipText: root.screenTintOn ? "Turn screen tint off to clear window tints" : "Remove the tint from every window"
-                    foreground: root.bar ? root.bar.barForeground : Color.foreground
-                    fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
-                    fontSize: Style.font.caption
-                    horizontalPadding: Style.space(8)
-                    verticalPadding: Style.space(2)
-                    onClicked: root.service && root.service.clearWindowTints()
-                }
-
-            }
-
-            Text {
-                visible: !root.windowShadeLoaded
-                text: "Per-window tint needs the HyprWindowShade plugin. Refer README."
-                color: root.bar ? root.bar.barForeground : Color.foreground
-                font.family: root.bar ? root.bar.fontFamily : Style.font.family
-                font.pixelSize: Style.font.body
-                textFormat: Text.PlainText
-                wrapMode: Text.WordWrap
-                width: list.width
-            }
-
-            Text {
-                visible: root.windowShadeLoaded && !root.screenTintOn
-                text: "Pick a shader, then click a window."
-                color: root.bar ? root.bar.barForeground : Color.foreground
-                font.family: root.bar ? root.bar.fontFamily : Style.font.family
-                font.pixelSize: Style.font.bodySmall
-                font.italic: true
-                opacity: 0.7
-                wrapMode: Text.WordWrap
-                width: list.width
-            }
-
-            Item {
-                width: list.width
-                height: Math.max(windowColumn.implicitHeight, tintNoticeBackground.visible ? tintNotice.implicitHeight + Style.space(20) : 0)
 
                 Column {
-                    id: windowColumn
-
                     width: parent.width
-                    layer.enabled: root.screenTintOn
+                    spacing: root.sectionGap
 
-                    Repeater {
-                        model: root.windowShadeLoaded ? root.runningWindows : []
+                    PanelSectionHeader {
+                        text: "SHADER"
+                        foreground: root.foreground
+                        fontFamily: root.fontFamily
+                    }
 
-                        delegate: Item {
-                            id: windowItem
+                    Text {
+                        visible: root.shaderCount === 0
+                        text: "No shaders found in shaders/."
+                        color: root.mutedForeground
+                        font.family: root.fontFamily
+                        font.pixelSize: Style.font.bodySmall
+                        textFormat: Text.PlainText
+                        wrapMode: Text.WordWrap
+                        width: parent.width
+                    }
 
-                            required property var modelData
-                            readonly property bool tinted: windowItem.modelData.address in root.tintedWindows
-                            readonly property string shaderFile: tinted ? root.tintedWindows[windowItem.modelData.address] : ""
+                    Column {
+                        width: parent.width
+                        spacing: root.rowGap
 
-                            width: windowColumn.width
-                            height: windowRow.implicitHeight
+                        Repeater {
+                            model: root.shaderList
 
-                            CursorSurface {
-                                id: windowRow
+                            delegate: TintRow {
+                                required property int index
+                                required property string fileName
 
-                                width: parent.width
-                                implicitHeight: Math.max(windowIcon.height, windowLabel.implicitHeight) + Style.space(14)
-                                hasCursor: root.screenTintOn ? false : windowMouseArea.containsMouse
-                                current: windowItem.tinted
-
-                                Image {
-                                    id: windowIcon
-
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    anchors.left: parent.left
-                                    anchors.leftMargin: Style.space(8)
-                                    width: Style.font.iconLarge
-                                    height: Style.font.iconLarge
-                                    fillMode: Image.PreserveAspectFit
-                                    sourceSize.width: width * Screen.devicePixelRatio
-                                    sourceSize.height: height * Screen.devicePixelRatio
-                                    asynchronous: true
-                                    source: windowItem.modelData.icon || ""
-                                }
-
-                                Text {
-                                    id: windowLabel
-
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    anchors.left: windowIcon.right
-                                    anchors.right: windowShaderLabel.visible ? windowShaderLabel.left : parent.right
-                                    anchors.leftMargin: Style.space(8)
-                                    anchors.rightMargin: Style.space(8)
-                                    textFormat: Text.PlainText
-                                    elide: Text.ElideRight
-                                    text: windowItem.modelData.title
-                                    color: root.bar ? root.bar.barForeground : Color.foreground
-                                    font.family: root.bar ? root.bar.fontFamily : Style.font.family
-                                    font.pixelSize: Style.font.body
-                                }
-
-                                Text {
-                                    id: windowShaderLabel
-
-                                    visible: windowItem.shaderFile !== ""
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    anchors.right: parent.right
-                                    anchors.rightMargin: Style.space(8)
-                                    textFormat: Text.PlainText
-                                    text: Shader.displayName(windowItem.shaderFile)
-                                    color: root.bar ? root.bar.barForeground : Color.foreground
-                                    font.family: root.bar ? root.bar.fontFamily : Style.font.family
-                                    font.pixelSize: Style.font.bodySmall
-                                    opacity: 0.7
-                                }
-
-                                MouseArea {
-                                    id: windowMouseArea
-
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    cursorShape: root.screenTintOn ? Qt.ArrowCursor : Qt.PointingHandCursor
-                                    onClicked: root.service && root.service.toggleWindowTint(windowItem.modelData.address)
-                                }
-
+                                label: Shader.displayName(fileName)
+                                trailing: current ? "" : ""
+                                trailingColor: Color.accent
+                                current: root.shaderIndex === index
+                                hasCursor: root.hasCursor("shader", String(index))
+                                onEntered: root.setCursor("shader", String(index))
+                                onActivated: root.service && root.service.selectShader(index)
                             }
 
                         }
 
                     }
 
-                    layer.effect: MultiEffect {
-                        blurEnabled: true
-                        blur: 0.5
-                        blurMax: 16
-                    }
-
                 }
 
-                Rectangle {
-                    id: tintNoticeBackground
+                PanelSeparator {
+                    foreground: root.foreground
+                }
 
-                    visible: root.screenTintOn
-                    anchors.fill: parent
-                    radius: Style.cornerRadius
-                    color: Qt.alpha(Color.popups.background, 0.5)
+                Column {
+                    width: parent.width
+                    spacing: root.sectionGap
+
+                    Item {
+                        width: parent.width
+                        height: Math.max(windowHeader.implicitHeight, clearAllButton.visible ? clearAllButton.implicitHeight : 0)
+
+                        PanelSectionHeader {
+                            id: windowHeader
+
+                            anchors.left: parent.left
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: "PER-WINDOW TINT"
+                            foreground: root.foreground
+                            fontFamily: root.fontFamily
+                        }
+
+                        Button {
+                            id: clearAllButton
+
+                            visible: root.windowShadeLoaded
+                            enabled: root.hasTintedWindows && !root.screenTintOn
+                            opacity: enabled ? 1 : 0.4
+                            anchors.right: parent.right
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: "Clear all"
+                            tooltipText: root.screenTintOn ? "Turn screen tint off to clear window tints" : "Remove the tint from every window"
+                            foreground: root.foreground
+                            fontFamily: root.fontFamily
+                            fontSize: Style.font.caption
+                            horizontalPadding: Style.space(8)
+                            verticalPadding: Style.space(3)
+                            hasCursor: root.hasCursor("clear", "")
+                            onHovered: function(h) {
+                                if (h && enabled)
+                                    root.setCursor("clear", "");
+
+                            }
+                            onClicked: root.service && root.service.clearWindowTints()
+                        }
+
+                    }
 
                     Text {
-                        id: tintNotice
-
-                        anchors.centerIn: parent
-                        width: parent.width - Style.space(16)
-                        horizontalAlignment: Text.AlignHCenter
-                        text: "Screen tint is on. Window tints are kept and come back when it's off."
-                        color: root.bar ? root.bar.barForeground : Color.foreground
-                        font.family: root.bar ? root.bar.fontFamily : Style.font.family
-                        font.pixelSize: Style.font.body
-                        font.italic: true
+                        visible: !root.windowShadeLoaded
+                        text: "Per-window tint needs the HyprWindowShade plugin. See the README."
+                        color: root.mutedForeground
+                        font.family: root.fontFamily
+                        font.pixelSize: Style.font.bodySmall
+                        textFormat: Text.PlainText
                         wrapMode: Text.WordWrap
+                        width: parent.width
+                    }
+
+                    Text {
+                        visible: root.windowsEditable
+                        text: root.runningWindows.length === 0 ? "No windows open." : "Pick a shader, then click a window."
+                        color: root.mutedForeground
+                        font.family: root.fontFamily
+                        font.pixelSize: Style.font.bodySmall
+                        textFormat: Text.PlainText
+                        wrapMode: Text.WordWrap
+                        width: parent.width
+                    }
+
+                    Item {
+                        visible: root.windowShadeLoaded && root.runningWindows.length > 0
+                        width: parent.width
+                        height: Math.max(windowColumn.implicitHeight, tintNoticeBackground.visible ? tintNotice.implicitHeight + Style.space(20) : 0)
+
+                        Column {
+                            id: windowColumn
+
+                            width: parent.width
+                            spacing: root.rowGap
+                            layer.enabled: root.screenTintOn
+
+                            Repeater {
+                                model: root.windowShadeLoaded ? root.runningWindows : []
+
+                                delegate: TintRow {
+                                    required property var modelData
+                                    readonly property bool tinted: modelData.address in root.tintedWindows
+
+                                    iconSource: modelData.icon || ""
+                                    label: modelData.title
+                                    trailing: tinted ? Shader.displayName(root.tintedWindows[modelData.address]) : ""
+                                    interactive: !root.screenTintOn
+                                    current: tinted
+                                    hasCursor: root.hasCursor("window", modelData.address)
+                                    onEntered: root.setCursor("window", modelData.address)
+                                    onActivated: root.service && root.service.toggleWindowTint(modelData.address)
+                                }
+
+                            }
+
+                            layer.effect: MultiEffect {
+                                blurEnabled: true
+                                blur: 0.5
+                                blurMax: 16
+                            }
+
+                        }
+
+                        Rectangle {
+                            id: tintNoticeBackground
+
+                            visible: root.screenTintOn
+                            anchors.fill: parent
+                            radius: Style.cornerRadius
+                            color: Qt.alpha(Color.popups.background, 0.6)
+
+                            Text {
+                                id: tintNotice
+
+                                anchors.centerIn: parent
+                                width: parent.width - Style.space(24)
+                                horizontalAlignment: Text.AlignHCenter
+                                text: "Screen tint is on. Window tints are kept and come back when it's off."
+                                color: root.foreground
+                                font.family: root.fontFamily
+                                font.pixelSize: Style.font.bodySmall
+                                wrapMode: Text.WordWrap
+                            }
+
+                        }
+
                     }
 
                 }
 
             }
 
+        }
+
+    }
+
+    Component {
+        id: heroIcon
+
+        Text {
+            text: ""
+            color: root.foreground
+            opacity: root.screenTintOn ? 1 : 0.45
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.display
+        }
+
+    }
+
+    Component {
+        id: screenSwitch
+
+        ToggleSwitch {
+            checked: root.screenTintOn
+            foreground: root.foreground
+            hasCursor: root.hasCursor("screen", "")
+            onHovered: function(h) {
+                if (h)
+                    root.setCursor("screen", "");
+
+            }
+            onToggled: root.service && root.service.toggleScreenTint()
+        }
+
+    }
+
+    component TintRow: CursorSurface {
+        id: row
+
+        property string iconSource: ""
+        property string label: ""
+        property string trailing: ""
+        property color trailingColor: root.mutedForeground
+        property bool interactive: true
+
+        signal entered()
+        signal activated()
+
+        width: parent ? parent.width : 0
+        implicitHeight: Math.max(Style.font.iconLarge, rowLabel.implicitHeight) + Style.space(16)
+        foreground: root.foreground
+
+        Image {
+            id: rowIcon
+
+            visible: row.iconSource !== ""
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.left: parent.left
+            anchors.leftMargin: Style.space(10)
+            width: Style.font.iconLarge
+            height: Style.font.iconLarge
+            fillMode: Image.PreserveAspectFit
+            sourceSize.width: width * Screen.devicePixelRatio
+            sourceSize.height: height * Screen.devicePixelRatio
+            asynchronous: true
+            source: row.iconSource
+        }
+
+        Text {
+            id: rowLabel
+
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.left: rowIcon.visible ? rowIcon.right : parent.left
+            anchors.right: rowTrailing.visible ? rowTrailing.left : parent.right
+            anchors.leftMargin: Style.space(10)
+            anchors.rightMargin: Style.space(10)
+            textFormat: Text.PlainText
+            elide: Text.ElideRight
+            text: row.label
+            color: root.foreground
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.body
+        }
+
+        Text {
+            id: rowTrailing
+
+            visible: row.trailing !== ""
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.right: parent.right
+            anchors.rightMargin: Style.space(10)
+            textFormat: Text.PlainText
+            text: row.trailing
+            color: row.trailingColor
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.bodySmall
+        }
+
+        MouseArea {
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: row.interactive ? Qt.PointingHandCursor : Qt.ArrowCursor
+            onEntered: {
+                if (row.interactive)
+                    row.entered();
+
+            }
+            onClicked: {
+                if (row.interactive)
+                    row.activated();
+
+            }
         }
 
     }
