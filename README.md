@@ -15,6 +15,8 @@ evening. Tint the whole screen, or give single windows their own tint.
 - **Stays in sync:** every bar on every monitor shows the same state; window
   tints survive a shell restart and stay on in fullscreen.
 
+![Project Demo](assets/omaTint.gif)
+
 ## Requirements
 
 - Omarchy (tested on 4.0.6 with Hyprland 0.56.2)
