@@ -12,6 +12,7 @@ BarWidget {
     readonly property int shaderIndex: service ? service.shaderIndex : 0
     readonly property var tintedWindows: service ? service.tintedWindows : ({
     })
+    readonly property bool hasTintedWindows: Object.keys(tintedWindows).length > 0
     readonly property bool windowShadeLoaded: service ? service.windowShadeLoaded : false
     readonly property var shaderList: service ? service.shaderList : null
     readonly property int shaderCount: shaderList ? shaderList.count : 0
@@ -136,10 +137,38 @@ BarWidget {
 
             }
 
-            PanelSectionHeader {
-                text: "Per-Window Tint"
-                foreground: root.bar ? root.bar.barForeground : Color.foreground
-                fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
+            Item {
+                width: list.width
+                height: Math.max(windowHeader.implicitHeight, clearAllButton.visible ? clearAllButton.implicitHeight : 0)
+
+                PanelSectionHeader {
+                    id: windowHeader
+
+                    anchors.left: parent.left
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "Per-Window Tint"
+                    foreground: root.bar ? root.bar.barForeground : Color.foreground
+                    fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
+                }
+
+                Button {
+                    id: clearAllButton
+
+                    visible: root.windowShadeLoaded
+                    enabled: root.hasTintedWindows && !root.screenTintOn
+                    opacity: enabled ? 1 : 0.4
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "Clear all"
+                    tooltipText: root.screenTintOn ? "Turn screen tint off to clear window tints" : "Remove the tint from every window"
+                    foreground: root.bar ? root.bar.barForeground : Color.foreground
+                    fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
+                    fontSize: Style.font.caption
+                    horizontalPadding: Style.space(8)
+                    verticalPadding: Style.space(2)
+                    onClicked: root.service && root.service.clearWindowTints()
+                }
+
             }
 
             Text {
@@ -149,6 +178,18 @@ BarWidget {
                 font.family: root.bar ? root.bar.fontFamily : Style.font.family
                 font.pixelSize: Style.font.body
                 textFormat: Text.PlainText
+                wrapMode: Text.WordWrap
+                width: list.width
+            }
+
+            Text {
+                visible: root.windowShadeLoaded && !root.screenTintOn
+                text: "Pick a shader, then click a window."
+                color: root.bar ? root.bar.barForeground : Color.foreground
+                font.family: root.bar ? root.bar.fontFamily : Style.font.family
+                font.pixelSize: Style.font.bodySmall
+                font.italic: true
+                opacity: 0.7
                 wrapMode: Text.WordWrap
                 width: list.width
             }
@@ -170,6 +211,8 @@ BarWidget {
                             id: windowItem
 
                             required property var modelData
+                            readonly property bool tinted: windowItem.modelData.address in root.tintedWindows
+                            readonly property string shaderFile: tinted ? root.tintedWindows[windowItem.modelData.address] : ""
 
                             width: windowColumn.width
                             height: windowRow.implicitHeight
@@ -180,7 +223,7 @@ BarWidget {
                                 width: parent.width
                                 implicitHeight: Math.max(windowIcon.height, windowLabel.implicitHeight) + Style.space(14)
                                 hasCursor: root.screenTintOn ? false : windowMouseArea.containsMouse
-                                current: !!root.tintedWindows[windowItem.modelData.address]
+                                current: windowItem.tinted
 
                                 Image {
                                     id: windowIcon
@@ -202,7 +245,7 @@ BarWidget {
 
                                     anchors.verticalCenter: parent.verticalCenter
                                     anchors.left: windowIcon.right
-                                    anchors.right: parent.right
+                                    anchors.right: windowShaderLabel.visible ? windowShaderLabel.left : parent.right
                                     anchors.leftMargin: Style.space(8)
                                     anchors.rightMargin: Style.space(8)
                                     textFormat: Text.PlainText
@@ -211,7 +254,21 @@ BarWidget {
                                     color: root.bar ? root.bar.barForeground : Color.foreground
                                     font.family: root.bar ? root.bar.fontFamily : Style.font.family
                                     font.pixelSize: Style.font.body
-                                    opacity: root.screenTintOn ? 0.1 : 1
+                                }
+
+                                Text {
+                                    id: windowShaderLabel
+
+                                    visible: windowItem.shaderFile !== ""
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    anchors.right: parent.right
+                                    anchors.rightMargin: Style.space(8)
+                                    textFormat: Text.PlainText
+                                    text: Shader.displayName(windowItem.shaderFile)
+                                    color: root.bar ? root.bar.barForeground : Color.foreground
+                                    font.family: root.bar ? root.bar.fontFamily : Style.font.family
+                                    font.pixelSize: Style.font.bodySmall
+                                    opacity: 0.7
                                 }
 
                                 MouseArea {
@@ -251,7 +308,7 @@ BarWidget {
                         anchors.centerIn: parent
                         width: parent.width - Style.space(16)
                         horizontalAlignment: Text.AlignHCenter
-                        text: "Screen tint is on: per-window tint applies when it's off"
+                        text: "Screen tint is on. Window tints are kept and come back when it's off."
                         color: root.bar ? root.bar.barForeground : Color.foreground
                         font.family: root.bar ? root.bar.fontFamily : Style.font.family
                         font.pixelSize: Style.font.body

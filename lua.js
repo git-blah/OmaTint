@@ -1,7 +1,10 @@
 .pragma library
 
-// Hyprland window tag marking a window this widget has tinted.
 const TINT_TAG = "window_tint"
+
+function tintTag(fileName){
+    return fileName ? TINT_TAG + ":" + fileName : TINT_TAG
+}
 
 function quote(value){
     const s = String(value)
@@ -53,8 +56,8 @@ function setClassShader(appId,path){
     return 'hl.plugin.HyprWindowShade.classshader(' + quote(appId)+',' + quote(path) + ')'
 }
 
-function tagWindow(address, on){
-    const tags = [TINT_TAG, "shader_fullscreen_stack:1"]
+function tagWindow(address, fileName, on){
+    const tags = [tintTag(fileName), "shader_fullscreen_stack:1"]
     
     return(tags.map((tag)=>('hl.dispatch(hl.dsp.window.tag({ tag = ' + quote((on?'+':'-') + tag) + ', window = ' + quote("address:" + address) + '}))')).join(" "))
 }
@@ -65,8 +68,11 @@ function parseTintedWindows(text){
         const windows = JSON.parse(text)
         if(!Array.isArray(windows)) return {}
         for (const win of windows){
-            if(Array.isArray(win?.tags) && win.tags.includes(TINT_TAG)){
-                tinted[win.address] = true
+            if(!Array.isArray(win?.tags)) continue
+            for (const tag of win.tags){
+                if(typeof tag !== "string" || tag.endsWith("*")) continue
+                if(tag === TINT_TAG) tinted[win.address] = ""
+                else if(tag.startsWith(TINT_TAG + ":")) tinted[win.address] = tag.slice(TINT_TAG.length + 1)
             }
         }
         return tinted

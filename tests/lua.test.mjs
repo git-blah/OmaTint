@@ -58,12 +58,12 @@ function fakeHyprland(active, alive) {
   );
 }
 
-function runTag(address, on) {
+function runTag(address, fileName, on) {
   return luaRoundTrip(
     "(function() local got = {};" +
       "hl = { dsp = { window = { tag = function(t) return t end } }, " +
       ' dispatch = function(t) got[#got + 1] = t.tag .. "@" .. t.window end }; ' +
-      Lua.tagWindow(address, on) +
+      Lua.tagWindow(address, fileName, on) +
       ' return table.concat(got,"|") end)()',
   );
 }
@@ -121,7 +121,6 @@ test("quote exact escapes", () => {
 });
 
 test("quote pads escapes so a following digit is not swallowed", () => {
-  // "\0" + "12" must not become "\012" (newline) in Lua
   assert.equal(Lua.quote("\u000012"), '"\\00012"');
   const back = luaRoundTrip(Lua.quote("\u000012"));
   if (back !== null) assert.equal(back, "\u000012");
@@ -353,13 +352,19 @@ for (const [s, ans] of normalizeAddressCases) {
 
 test("tagWindow adds both tags", () => {
   assert.equal(
-    runTag("0x2", true),
-    "+window_tint@address:0x2|+shader_fullscreen_stack:1@address:0x2",
+    runTag("0x2", "grayscale.glsl", true),
+    "+window_tint:grayscale.glsl@address:0x2|+shader_fullscreen_stack:1@address:0x2",
   );
 });
 test("tagWindow removes both tags", () => {
   assert.equal(
-    runTag("0x2", false),
+    runTag("0x2", "grayscale.glsl", false),
+    "-window_tint:grayscale.glsl@address:0x2|-shader_fullscreen_stack:1@address:0x2",
+  );
+});
+test("tagWindow removes the legacy bare tag", () => {
+  assert.equal(
+    runTag("0x2", "", false),
     "-window_tint@address:0x2|-shader_fullscreen_stack:1@address:0x2",
   );
 });
@@ -367,19 +372,28 @@ test("tagWindow removes both tags", () => {
 for (const s of HOSTILE) {
   test("tagWindow handles hostile address " + JSON.stringify(s), () => {
     assert.equal(
-      runTag(s, true),
-      "+window_tint@address:" + s + "|+shader_fullscreen_stack:1@address:" + s,
+      runTag(s, "grayscale.glsl", true),
+      "+window_tint:grayscale.glsl@address:" + s + "|+shader_fullscreen_stack:1@address:" + s,
+    );
+  });
+  test("tagWindow handles hostile file name " + JSON.stringify(s), () => {
+    assert.equal(
+      runTag("0x2", s, true),
+      (s ? "+window_tint:" + s : "+window_tint") + "@address:0x2|+shader_fullscreen_stack:1@address:0x2",
     );
   });
 }
 
 const parseTintedWindowsCases = [
-  ['[{"address":"0x1","tags":["window_tint"]}]', { "0x1": true }],
+  ['[{"address":"0x1","tags":["window_tint:grayscale.glsl"]}]', { "0x1": "grayscale.glsl" }],
+  ['[{"address":"0x1","tags":["window_tint"]}]', { "0x1": "" }],
   ['[{"address":"0x1","tags":["default-opacity*"]}]', {}],
   ['[{"address":"0x1","tags":["window_tint*"]}]', {}],
+  ['[{"address":"0x1","tags":["window_tint:grayscale.glsl*"]}]', {}],
+  ['[{"address":"0x1","tags":["window_tinted"]}]', {}],
   [
-    '[{"address":"0x1","tags":["window_tint"]},{"address":"0x2","tags":[]}]',
-    { "0x1": true },
+    '[{"address":"0x1","tags":["shader_fullscreen_stack:1","window_tint:nightlight.glsl"]},{"address":"0x2","tags":["window_tint:grayscale.glsl"]},{"address":"0x3","tags":[]}]',
+    { "0x1": "nightlight.glsl", "0x2": "grayscale.glsl" },
   ],
   ["[]", {}],
   ["not json", {}],

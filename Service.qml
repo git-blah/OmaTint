@@ -19,7 +19,7 @@ Item {
     readonly property alias shaderList: shaderList
     readonly property string selectedShaderFile: shaderList.count > 0 ? shaderList.get(shaderIndex % shaderList.count, "fileName") : ""
     readonly property string pluginDir: decodeURIComponent(String(Qt.resolvedUrl("."))).replace(/^file:\/\//, "").replace(/\/$/, "")
-    readonly property string selectedShaderPath: selectedShaderFile === "" ? "" : pluginDir + "/shaders/" + selectedShaderFile
+    readonly property string selectedShaderPath: shaderPath(selectedShaderFile)
     readonly property var runningWindows: {
         ToplevelManager.toplevels.values;
         const out = [];
@@ -79,17 +79,18 @@ Item {
 
         root.shaderIndex = (i + shaderList.count) % shaderList.count;
         root.applyScreenTint();
-        root.reapplyWindowTints();
+    }
+
+    function shaderPath(fileName) {
+        return fileName ? root.pluginDir + "/shaders/" + fileName : "";
     }
 
     function toggleScreenTint() {
         root.screenTintOn = !root.screenTintOn;
-        if (root.screenTintOn) {
-            root.clearWindowTints();
+        if (root.screenTintOn)
             root.applyScreenTint();
-        } else {
+        else
             root.setScreenShader("");
-        }
     }
 
     function applyScreenTint() {
@@ -122,25 +123,46 @@ Item {
         root.rerun(clientsProc);
     }
 
-    function setWindowTint(address, on) {
-        root.queueEval(Lua.setWindowShader(address, on ? root.selectedShaderPath : "") + " " + Lua.tagWindow(address, on));
+    function setWindowTint(address, fileName) {
+        const wasTinted = address in root.tintedWindows;
+        let code = Lua.setWindowShader(address, root.shaderPath(fileName));
+        if (wasTinted)
+            code += " " + Lua.tagWindow(address, root.tintedWindows[address], false);
+
+        if (fileName)
+            code += " " + Lua.tagWindow(address, fileName, true);
+
+        root.queueEval(code);
         const obj = Object.assign({
         }, root.tintedWindows);
-        if (on)
-            obj[address] = true;
+        if (fileName)
+            obj[address] = fileName;
         else
             delete obj[address];
         root.tintedWindows = obj;
     }
 
     function toggleWindowTint(address) {
-        if (!root.windowShadeLoaded)
+        if (!root.windowShadeLoaded || root.selectedShaderFile === "")
             return ;
 
         if (root.screenTintOn)
             return ;
 
-        root.setWindowTint(address, !root.tintedWindows[address]);
+        const same = address in root.tintedWindows && root.tintedWindows[address] === root.selectedShaderFile;
+        root.setWindowTint(address, same ? "" : root.selectedShaderFile);
+    }
+
+    function clearWindowTints() {
+        const addresses = Object.keys(root.tintedWindows);
+        if (addresses.length === 0 || root.screenTintOn)
+            return ;
+
+        root.queueEval(addresses.map((address) => {
+            return Lua.setWindowShader(address, "") + " " + Lua.tagWindow(address, root.tintedWindows[address], false);
+        }).join(" "));
+        root.tintedWindows = ({
+        });
     }
 
     function rerun(proc) {
@@ -148,27 +170,6 @@ Item {
             proc.again = true;
         else
             proc.running = true;
-    }
-
-    function clearWindowTints() {
-        if (Object.keys(root.tintedWindows).length === 0)
-            return ;
-
-        root.queueEval(Object.keys(root.tintedWindows).map((address) => {
-            return Lua.setWindowShader(address, "") + " " + Lua.tagWindow(address, false);
-        }).join(" "));
-        root.tintedWindows = ({
-        });
-        return ;
-    }
-
-    function reapplyWindowTints() {
-        if (Object.keys(root.tintedWindows).length === 0)
-            return ;
-
-        root.queueEval(Object.keys(root.tintedWindows).map((address) => {
-            return Lua.setWindowShader(address, root.selectedShaderPath);
-        }).join(" "));
     }
 
     onRunningWindowsChanged: {
@@ -182,7 +183,7 @@ Item {
         }
         for (const address in root.tintedWindows) {
             if (address in alive)
-                kept[address] = true;
+                kept[address] = root.tintedWindows[address];
             else
                 anyClosed = true;
         }
