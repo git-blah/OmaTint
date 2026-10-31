@@ -1,22 +1,21 @@
 {
   "schemaVersion": 1,
-  "id": "widget.tint",
-  "name": "Tint",
+  "id": "omaTint",
+  "name": "omaTint",
   "version": "0.1.0",
-  "author": "blah",
-  "license" :"MIT",
-  "description": "Customize screen with colors tints(grayscale, warmlight) for perfect visual atmosphere",
-  "kinds": [
-    "bar-widget"
-  ],
+  "author": "git-blah",
+  "license": "MIT",
+  "description": "Tint the whole screen or single windows (grayscale, night light).",
+  "kinds": ["service", "bar-widget"],
   "entryPoints": {
+    "service": "Service.qml",
     "barWidget": "tint.qml"
   },
   "barWidget": {
-    "displayName": "Tint",
-    "description": "Customize screen with colors tints(grayscale, warmlight) for perfect visual atmosphere",
+    "displayName": "omaTint",
+    "description": "Tint the whole screen or single windows (grayscale, night light).",
     "category": "Appearance",
     "allowMultiple": false,
-    "defaultSection" : "right"
+    "defaultSection": "right"
   }
 }

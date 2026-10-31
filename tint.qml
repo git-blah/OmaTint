@@ -1,330 +1,136 @@
-import Qt.labs.folderlistmodel
 import QtQuick
-import Quickshell
-import Quickshell.Hyprland
-import Quickshell.Io
-import "lua.js" as Lua
+import QtQuick.Effects
 import qs.Commons
 import qs.Ui
 import "shader.js" as Shader
 
 BarWidget {
-    // TODO: follow the selected shader + intensity like global does (see notes.md)
-
     id: root
 
-    property bool globalOn: false
-    property real intensity: 1
-    property int shaderIndex: 0
-    property int slot: 0
-    property real wheelAccumulator: 0
-    property string lastOut: ""
-    property var evalQueue: []
-    property var perWindowOn: ({
+    readonly property var service: bar && bar.shell ? bar.shell.serviceFor(moduleName) : null
+    readonly property bool screenTintOn: service ? service.screenTintOn : false
+    readonly property int shaderIndex: service ? service.shaderIndex : 0
+    readonly property var tintedWindows: service ? service.tintedWindows : ({
     })
-    property bool windowShaderLoaded: false
-    property bool openedToggle: false
-    readonly property string pluginDir: decodeURIComponent(String(Qt.resolvedUrl("."))).replace(/^file:\/\//, "").replace(/\/$/, "")
-    // Generated shaders live outside the plugin dir: the shell watches that
-    // dir recursively and would reload the widget on every write.
-    readonly property string outDir: Quickshell.env("XDG_RUNTIME_DIR") + "/widget-tint"
-    readonly property string selectedShader: shaderList.count > 0 ? shaderList.get(shaderIndex % shaderList.count, "fileName") : ""
-    readonly property string windowShaderPath: decodeURIComponent(String(Qt.resolvedUrl("shaders/grayscale.glsl")).replace(/^file:\/\//, ""))
-    readonly property var runningWindows: {
-        const out = [];
-        for (const t of Hyprland.toplevels.values) {
-            const address = Lua.hyprAddress(t.address);
-            if (address === "")
-                continue;
+    readonly property bool hasTintedWindows: Object.keys(tintedWindows).length > 0
+    readonly property bool windowShadeLoaded: service ? service.windowShadeLoaded : false
+    readonly property var shaderList: service ? service.shaderList : null
+    readonly property int shaderCount: shaderList ? shaderList.count : 0
+    readonly property string selectedShaderFile: service ? service.selectedShaderFile : ""
+    readonly property var runningWindows: service ? service.runningWindows : []
+    readonly property bool windowsEditable: windowShadeLoaded && !screenTintOn
+    property bool panelOpen: false
 
-            const title = t.title;
-            const appId = t.wayland ? t.wayland.appId : "";
-            const icon = appId ? Quickshell.iconPath(appId, true) : "";
-            out.push({
-                "address": address,
-                "title": title,
-                "appId": appId,
-                "icon": icon
+    readonly property color foreground: bar ? bar.barForeground : Color.foreground
+    readonly property color mutedForeground: Qt.darker(foreground, 1.4)
+    readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
+    readonly property int rowGap: Style.space(2)
+    readonly property int sectionGap: Style.space(6)
+
+    property bool cursorActive: false
+    property string cursorKind: "screen"
+    property string cursorKey: ""
+    property int lastCursorIndex: 0
+    readonly property int cursorIndex: cursorStops.findIndex((s) => {
+        return s.kind === cursorKind && s.key === cursorKey;
+    })
+    readonly property var cursorStops: {
+        const stops = [{
+            "kind": "screen",
+            "key": ""
+        }];
+        for (let i = 0; i < root.shaderCount; i++) {
+            stops.push({
+                "kind": "shader",
+                "key": String(i)
             });
         }
-        return out;
+        if (root.windowsEditable) {
+            if (root.hasTintedWindows)
+                stops.push({
+                "kind": "clear",
+                "key": ""
+            });
+
+            for (const w of root.runningWindows) {
+                stops.push({
+                    "kind": "window",
+                    "key": w.address
+                });
+            }
+        }
+        return stops;
+    }
+
+    readonly property bool opened: panelOpen
+
+    function open() {
+        root.panelOpen = true;
     }
 
     function close() {
-        //KeyboardPanel calls owner.close() on an outside click
-        root.openedToggle = false;
+        root.panelOpen = false;
     }
 
-    function setIntensity(v) {
-        root.intensity = Math.max(0, Math.min(1, v));
-        root.apply();
+    function hasCursor(kind, key) {
+        return root.cursorActive && root.cursorIndex >= 0 && root.cursorKind === kind && root.cursorKey === (key || "");
     }
 
-    function selectShader(i) {
-        if (shaderList.count === 0)
-            return ;
-
-        root.shaderIndex = (i + shaderList.count) % shaderList.count;
-        root.apply();
+    function setCursor(kind, key) {
+        root.cursorKind = kind;
+        root.cursorKey = key || "";
+        root.cursorActive = true;
     }
 
-    function toggleGlobal() {
-        var next = !root.globalOn;
-        root.globalOn = next;
-        if (root.globalOn) {
-            root.clearAllWindows();
-            root.apply();
-        } else {
-            root.sendShader("");
-        }
+    function setCursorAt(i) {
+        const stop = root.cursorStops[Math.max(0, Math.min(root.cursorStops.length - 1, i))];
+        if (stop)
+            root.setCursor(stop.kind, stop.key);
+
     }
 
-    function apply() {
-        if (!root.globalOn || root.selectedShader === "")
-            return ;
-
-        srcFile.path = root.pluginDir + "/shaders/" + root.selectedShader;
-        var out = Shader.withIntensity(srcFile.text(), root.intensity);
-        // FileView.setText skips identical text without emitting saved, so
-        // re-send the last file directly (e.g. toggling off and back on).
-        if (out === root.lastOut) {
-            root.sendShader(outFile.path);
+    function moveCursor(delta) {
+        if (!root.cursorActive) {
+            root.cursorActive = true;
             return ;
         }
-        root.lastOut = out;
-        root.slot = 1 - root.slot;
-        outFile.path = root.outDir + "/tint-" + (root.slot ? "b" : "a") + ".glsl";
-        outFile.setText(out);
+        root.setCursorAt((root.cursorIndex >= 0 ? root.cursorIndex : root.lastCursorIndex) + delta);
     }
 
-    function sendShader(path) {
-        root.runEval(Lua.setScreenShader(path));
-    }
-
-    function runEval(code) {
-        root.evalQueue.push(code);
-        root.pumpEval();
-    }
-
-    function pumpEval() {
-        if (evalProc.running || root.evalQueue.length === 0)
+    function activateCursor() {
+        const stop = root.cursorStops[root.cursorIndex];
+        if (!root.cursorActive || !stop || !root.service)
             return ;
 
-        let code = root.evalQueue.shift();
-        if (root.evalQueue.length === 0)
-            code += " " + Lua.notifyChanged();
-
-        evalProc.command = ["hyprctl", "eval", code];
-        evalProc.running = true;
+        if (stop.kind === "screen")
+            root.service.toggleScreenTint();
+        else if (stop.kind === "shader")
+            root.service.selectShader(Number(stop.key));
+        else if (stop.kind === "clear")
+            root.service.clearWindowTints();
+        else if (stop.kind === "window")
+            root.service.toggleWindowTint(stop.key);
     }
 
-    function refreshState() {
-        root.rerun(stateProc);
-        root.rerun(pluginProc);
-        root.rerun(clientsProc);
-    }
+    onCursorIndexChanged: {
+        if (root.cursorIndex >= 0)
+            root.lastCursorIndex = root.cursorIndex;
 
-    function setWindowShade(address, on) {
-        root.runEval(Lua.setWindowShader(address, on ? root.windowShaderPath : "") + " " + Lua.tagWindow(address, on));
-        const obj = Object.assign({
-        }, root.perWindowOn);
-        if (on)
-            obj[address] = true;
-        else
-            delete obj[address];
-        root.perWindowOn = obj; // assign new object so binding notice.
     }
-
-    function toggleWindow(address) {
-        if (!root.windowShaderLoaded)
+    onPanelOpenChanged: {
+        if (!root.panelOpen)
             return ;
 
-        if (root.globalOn)
-            return ;
-
-        setWindowShade(address, !root.perWindowOn[address]);
-    }
-
-    function rerun(proc) {
-        if (proc.running)
-            proc.again = true;
-        else
-            proc.running = true;
-    }
-
-    function clearAllWindows() {
-        if (Object.keys(root.perWindowOn).length === 0)
-            return ;
-
-        root.runEval(Object.keys(root.perWindowOn).map((addr) => {
-            return Lua.setWindowShader(addr, "") + " " + Lua.tagWindow(addr, false);
-        }).join(" "));
-        root.perWindowOn = ({
-        });
-        return ;
-    }
-
-    onRunningWindowsChanged: {
-        var reassignFlag = false;
-        var kept = ({
-        });
-        var alive = ({
-        });
-        for (const a of root.runningWindows) {
-            alive[a.address] = true;
-        }
-        for (const addr in root.perWindowOn) {
-            if (addr in alive)
-                kept[addr] = true;
-            else
-                reassignFlag = true;
-        }
-        if (reassignFlag)
-            root.perWindowOn = kept;
+        root.cursorActive = false;
+        root.cursorKind = "screen";
+        root.cursorKey = "";
+        if (root.service)
+            root.service.refreshState();
 
     }
-    onOpenedToggleChanged: {
-        if (root.openedToggle)
-            root.refreshState();
-
-    }
-    moduleName: "widget.tint"
+    moduleName: "omaTint"
     implicitWidth: button.implicitWidth
     implicitHeight: button.implicitHeight
-    Component.onCompleted: {
-        mkdirProc.running = true;
-        root.refreshState();
-    }
-
-    Connections {
-        function onRawEvent(event) {
-            if (["configreloaded"].includes(event.name))
-                root.refreshState();
-
-            if (event.name === "custom" && event.data === "widget.tint")
-                root.refreshState();
-
-        }
-
-        target: Hyprland
-    }
-
-    FolderListModel {
-        id: shaderList
-
-        folder: Qt.resolvedUrl("shaders")
-        nameFilters: ["*.glsl"]
-        showDirs: false
-    }
-
-    // blockLoading only makes the first load synchronous; after a path
-    // change text() would return the previous shader. Always read sync.
-    FileView {
-        id: srcFile
-
-        blockAllReads: true
-    }
-
-    FileView {
-        id: outFile
-
-        preload: false
-        atomicWrites: true
-        onSaved: root.sendShader(outFile.path)
-    }
-
-    Process {
-        id: stateProc
-
-        property bool again: false
-
-        command: ["hyprctl", "-j", "getoption", "decoration:screen_shader"]
-        onExited: {
-            if (again) {
-                again = false;
-                running = true;
-            }
-        }
-
-        stdout: StdioCollector {
-            waitForEnd: true
-            onStreamFinished: {
-                root.globalOn = Lua.screenShaderActive(text);
-            }
-        }
-
-    }
-
-    Process {
-        id: pluginProc
-
-        property bool again: false
-
-        command: ["hyprctl", "-j", "plugin", "list"]
-        onExited: {
-            if (again) {
-                again = false;
-                running = true;
-            }
-        }
-
-        stdout: StdioCollector {
-            waitForEnd: true
-            onStreamFinished: {
-                root.windowShaderLoaded = Lua.windowShadeLoaded(text);
-            }
-        }
-
-    }
-
-    Process {
-        id: clientsProc
-
-        property bool again: false
-
-        command: ["hyprctl", "-j", "clients"]
-        onExited: {
-            if (again) {
-                again = false;
-                running = true;
-            }
-        }
-
-        stdout: StdioCollector {
-            waitForEnd: true
-            onStreamFinished: {
-                root.perWindowOn = Lua.windowsMarked(text);
-            }
-        }
-
-    }
-
-    Process {
-        id: evalProc
-
-        onExited: {
-            if (root.evalQueue.length !== 0)
-                root.pumpEval();
-            else
-                root.refreshState();
-        }
-
-        stderr: StdioCollector {
-            waitForEnd: true
-            onStreamFinished: {
-                if (text)
-                    console.warn("widget.tint: hyprctl eval:", text.trim());
-
-            }
-        }
-
-    }
-
-    Process {
-        id: mkdirProc
-
-        command: ["mkdir", "-p", root.outDir]
-    }
 
     BarIconButton {
         id: button
@@ -332,22 +138,15 @@ BarWidget {
         anchors.fill: parent
         bar: root.bar
         text: ""
-        dimmed: !root.globalOn
-        tooltipText: root.globalOn ? Shader.displayName(root.selectedShader) + " · " + Math.round(root.intensity * 100) + "% \nMiddle-click:change tint" : "Turn Tint ON"
+        dimmed: !root.screenTintOn
+        tooltipText: root.screenTintOn ? Shader.displayName(root.selectedShaderFile) + " · middle-click: next tint · right-click: tint windows" : "Tint off · click to turn on · right-click: tint windows"
         onPressed: function(b) {
             if (b === Qt.LeftButton)
-                root.toggleGlobal();
+                root.service && root.service.toggleScreenTint();
             else if (b === Qt.RightButton)
-                root.openedToggle = !root.openedToggle;
+                root.panelOpen = !root.panelOpen;
             else if (b === Qt.MiddleButton)
-                root.selectShader(root.shaderIndex + 1);
-        }
-        onWheelMoved: function(delta) {
-            var w = Util.wheelSteps(root.wheelAccumulator, delta);
-            root.wheelAccumulator = w.remainder;
-            if (w.steps !== 0)
-                root.setIntensity(root.intensity + w.steps * 0.05);
-
+                root.service && root.service.selectShader(root.shaderIndex + 1);
         }
     }
 
@@ -357,103 +156,221 @@ BarWidget {
         anchorItem: button
         bar: root.bar
         owner: root
-        open: root.openedToggle
+        open: root.panelOpen
+        focusTarget: keyCatcher
         contentHeight: panel.fittedContentHeight(list.implicitHeight)
-        contentWidth: panel.fittedContentWidth(Style.space(260))
+        contentWidth: panel.fittedContentWidth(Style.space(340))
 
-        Column {
-            id: list
+        PanelKeyCatcher {
+            id: keyCatcher
 
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.top: parent.top
+            anchors.fill: parent
+            onMoveRequested: function(dx, dy) {
+                if (dy !== 0)
+                    root.moveCursor(dy);
 
-            PanelSectionHeader {
-                text: "Per Window Shade"
-                foreground: root.bar ? root.bar.barForeground : Color.foreground
-                fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
             }
+            onActivateRequested: root.activateCursor()
+            onCloseRequested: root.close()
 
-            Text {
-                visible: !root.windowShaderLoaded
-                text: "Per-window tint needs the HyprWindowShade plugin. Refer README."
-                color: root.bar ? root.bar.barForeground : Color.foreground
-                font.family: root.bar ? root.bar.fontFamily : Style.font.family
-                font.pixelSize: Style.font.body
-                textFormat: Text.PlainText
-                wrapMode: Text.WordWrap
-                width: list.width
-            }
+            Column {
+                id: list
 
-            Text {
-                visible: root.globalOn
-                text: "Global tint is on: per-window tint applies when its off"
-                color: root.bar ? root.bar.barForeground : Color.foreground
-                font.family: root.bar ? root.bar.fontFamily : Style.font.family
-                font.pixelSize: Style.font.body
-                font.italic: true
-                wrapMode: Text.WordWrap
-                width: list.width
-            }
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.top: parent.top
+                spacing: Style.space(14)
 
-            Repeater {
-                model: root.windowShaderLoaded ? root.runningWindows : []
+                PanelHero {
+                    title: "omaTint"
+                    meta: root.screenTintOn ? "Screen tint · " + Shader.displayName(root.selectedShaderFile) : "Screen tint off"
+                    foreground: root.foreground
+                    fontFamily: root.fontFamily
+                    iconComponent: heroIcon
+                    trailingControl: screenSwitch
+                }
 
-                delegate: Item {
-                    id: rowItem
+                PanelSeparator {
+                    foreground: root.foreground
+                }
 
-                    required property var modelData
+                Column {
+                    width: parent.width
+                    spacing: root.sectionGap
 
-                    width: list.width
-                    height: row.implicitHeight
+                    PanelSectionHeader {
+                        text: "TINT"
+                        foreground: root.foreground
+                        fontFamily: root.fontFamily
+                    }
 
-                    CursorSurface {
-                        id: row
-
+                    Text {
+                        visible: root.shaderCount === 0
+                        text: "No tints found. Add a .glsl file to shaders/."
+                        color: root.mutedForeground
+                        font.family: root.fontFamily
+                        font.pixelSize: Style.font.bodySmall
+                        textFormat: Text.PlainText
+                        wrapMode: Text.WordWrap
                         width: parent.width
-                        implicitHeight: Math.max(appIcon.height, label.implicitHeight) + Style.space(14)
-                        hasCursor: root.globalOn ? false : mouseArea.containsMouse
-                        current: !!root.perWindowOn[rowItem.modelData.address]
+                    }
 
-                        Image {
-                            id: appIcon
+                    Column {
+                        width: parent.width
+                        spacing: root.rowGap
 
-                            anchors.verticalCenter: parent.verticalCenter
+                        Repeater {
+                            model: root.shaderList
+
+                            delegate: TintRow {
+                                required property int index
+                                required property string fileName
+
+                                label: Shader.displayName(fileName)
+                                trailing: current ? "" : ""
+                                trailingColor: Color.accent
+                                current: root.shaderIndex === index
+                                hasCursor: root.hasCursor("shader", String(index))
+                                onEntered: root.setCursor("shader", String(index))
+                                onActivated: root.service && root.service.selectShader(index)
+                            }
+
+                        }
+
+                    }
+
+                }
+
+                PanelSeparator {
+                    foreground: root.foreground
+                }
+
+                Column {
+                    width: parent.width
+                    spacing: root.sectionGap
+
+                    Item {
+                        width: parent.width
+                        height: Math.max(windowHeader.implicitHeight, clearAllButton.visible ? clearAllButton.implicitHeight : 0)
+
+                        PanelSectionHeader {
+                            id: windowHeader
+
                             anchors.left: parent.left
-                            anchors.leftMargin: Style.space(8)
-                            width: Style.font.iconLarge
-                            height: Style.font.iconLarge
-                            fillMode: Image.PreserveAspectFit
-                            sourceSize.width: width * Screen.devicePixelRatio
-                            sourceSize.height: height * Screen.devicePixelRatio
-                            asynchronous: true
-                            source: rowItem.modelData.icon || ""
-                        }
-
-                        Text {
-                            id: label
-
                             anchors.verticalCenter: parent.verticalCenter
-                            anchors.left: appIcon.right
-                            anchors.right: parent.right
-                            anchors.leftMargin: Style.space(8)
-                            anchors.rightMargin: Style.space(8)
-                            textFormat: Text.PlainText
-                            elide: Text.ElideRight
-                            text: rowItem.modelData.title
-                            color: root.bar ? root.bar.barForeground : Color.foreground
-                            font.family: root.bar ? root.bar.fontFamily : Style.font.family
-                            font.pixelSize: Style.font.body
-                            opacity: root.globalOn ? 0.5 : 1
+                            text: "TINT WINDOWS"
+                            foreground: root.foreground
+                            fontFamily: root.fontFamily
                         }
 
-                        MouseArea {
-                            id: mouseArea
+                        Button {
+                            id: clearAllButton
 
+                            visible: root.windowShadeLoaded
+                            enabled: root.hasTintedWindows && !root.screenTintOn
+                            opacity: enabled ? 1 : 0.4
+                            anchors.right: parent.right
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: "Clear all"
+                            tooltipText: root.screenTintOn ? "Turn screen tint off to clear window tints" : "Remove the tint from every window"
+                            foreground: root.foreground
+                            fontFamily: root.fontFamily
+                            fontSize: Style.font.caption
+                            horizontalPadding: Style.space(8)
+                            verticalPadding: Style.space(3)
+                            hasCursor: root.hasCursor("clear", "")
+                            onHovered: function(h) {
+                                if (h && enabled)
+                                    root.setCursor("clear", "");
+
+                            }
+                            onClicked: root.service && root.service.clearWindowTints()
+                        }
+
+                    }
+
+                    Text {
+                        visible: !root.windowShadeLoaded
+                        text: "Per-window tint needs the HyprWindowShade Hyprland plugin."
+                        color: root.mutedForeground
+                        font.family: root.fontFamily
+                        font.pixelSize: Style.font.bodySmall
+                        textFormat: Text.PlainText
+                        wrapMode: Text.WordWrap
+                        width: parent.width
+                    }
+
+                    Text {
+                        visible: root.windowsEditable
+                        text: root.runningWindows.length === 0 ? "No windows open" : "Pick a tint, then click a window."
+                        color: root.mutedForeground
+                        font.family: root.fontFamily
+                        font.pixelSize: Style.font.bodySmall
+                        textFormat: Text.PlainText
+                        wrapMode: Text.WordWrap
+                        width: parent.width
+                    }
+
+                    Item {
+                        visible: root.windowShadeLoaded && root.runningWindows.length > 0
+                        width: parent.width
+                        height: Math.max(windowColumn.implicitHeight, tintNoticeBackground.visible ? tintNotice.implicitHeight + Style.space(20) : 0)
+
+                        Column {
+                            id: windowColumn
+
+                            width: parent.width
+                            spacing: root.rowGap
+                            layer.enabled: root.screenTintOn
+
+                            Repeater {
+                                model: root.windowShadeLoaded ? root.runningWindows : []
+
+                                delegate: TintRow {
+                                    required property var modelData
+                                    readonly property bool tinted: modelData.address in root.tintedWindows
+
+                                    iconSource: modelData.icon || ""
+                                    label: modelData.title
+                                    trailing: tinted ? Shader.displayName(root.tintedWindows[modelData.address]) : ""
+                                    interactive: !root.screenTintOn
+                                    current: tinted
+                                    hasCursor: root.hasCursor("window", modelData.address)
+                                    onEntered: root.setCursor("window", modelData.address)
+                                    onActivated: root.service && root.service.toggleWindowTint(modelData.address)
+                                }
+
+                            }
+
+                            layer.effect: MultiEffect {
+                                blurEnabled: true
+                                blur: 0.5
+                                blurMax: 16
+                            }
+
+                        }
+
+                        Rectangle {
+                            id: tintNoticeBackground
+
+                            visible: root.screenTintOn
                             anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: root.toggleWindow(rowItem.modelData.address)
+                            radius: Style.cornerRadius
+                            color: Qt.alpha(Color.popups.background, 0.6)
+
+                            Text {
+                                id: tintNotice
+
+                                anchors.centerIn: parent
+                                width: parent.width - Style.space(24)
+                                horizontalAlignment: Text.AlignHCenter
+                                text: "Whole screen is tinted. Turn it off to tint single windows. Window tints are kept."
+                                color: root.foreground
+                                font.family: root.fontFamily
+                                font.pixelSize: Style.font.bodySmall
+                                wrapMode: Text.WordWrap
+                            }
+
                         }
 
                     }
@@ -462,6 +379,116 @@ BarWidget {
 
             }
 
+        }
+
+    }
+
+    Component {
+        id: heroIcon
+
+        Text {
+            text: ""
+            color: root.foreground
+            opacity: root.screenTintOn ? 1 : 0.45
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.display
+        }
+
+    }
+
+    Component {
+        id: screenSwitch
+
+        ToggleSwitch {
+            checked: root.screenTintOn
+            foreground: root.foreground
+            hasCursor: root.hasCursor("screen", "")
+            onHovered: function(h) {
+                if (h)
+                    root.setCursor("screen", "");
+
+            }
+            onToggled: root.service && root.service.toggleScreenTint()
+        }
+
+    }
+
+    component TintRow: CursorSurface {
+        id: row
+
+        property string iconSource: ""
+        property string label: ""
+        property string trailing: ""
+        property color trailingColor: root.mutedForeground
+        property bool interactive: true
+
+        signal entered()
+        signal activated()
+
+        width: parent ? parent.width : 0
+        implicitHeight: Math.max(Style.font.iconLarge, rowLabel.implicitHeight) + Style.space(16)
+        foreground: root.foreground
+
+        Image {
+            id: rowIcon
+
+            visible: row.iconSource !== ""
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.left: parent.left
+            anchors.leftMargin: Style.space(10)
+            width: Style.font.iconLarge
+            height: Style.font.iconLarge
+            fillMode: Image.PreserveAspectFit
+            sourceSize.width: width * Screen.devicePixelRatio
+            sourceSize.height: height * Screen.devicePixelRatio
+            asynchronous: true
+            source: row.iconSource
+        }
+
+        Text {
+            id: rowLabel
+
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.left: rowIcon.visible ? rowIcon.right : parent.left
+            anchors.right: rowTrailing.visible ? rowTrailing.left : parent.right
+            anchors.leftMargin: Style.space(10)
+            anchors.rightMargin: Style.space(10)
+            textFormat: Text.PlainText
+            elide: Text.ElideRight
+            text: row.label
+            color: root.foreground
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.body
+        }
+
+        Text {
+            id: rowTrailing
+
+            visible: row.trailing !== ""
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.right: parent.right
+            anchors.rightMargin: Style.space(10)
+            textFormat: Text.PlainText
+            text: row.trailing
+            color: row.trailingColor
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.bodySmall
+        }
+
+        MouseArea {
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: row.interactive ? Qt.PointingHandCursor : Qt.ArrowCursor
+            onEntered: {
+                if (row.interactive)
+                    row.entered();
+
+            }
+            onClicked: {
+                if (row.interactive)
+                    row.activated();
+
+            }
         }
 
     }

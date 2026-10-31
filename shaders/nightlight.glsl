@@ -1,8 +1,4 @@
-#version 320 es      
-
-#ifndef INTENSITY
-#define INTENSITY 1.0
-#endif
+#version 320 es
 
 precision highp float;   
 
@@ -13,6 +9,6 @@ out vec4 fragColor;
 void main() {
     vec4 col = texture(tex, v_texcoord);
     vec3 warm = col.rgb * vec3(1.12, 1.03, 0.78);
-    col.rgb = mix(col.rgb, warm, INTENSITY);
+    col.rgb = warm;
     fragColor = col;                      
 }
