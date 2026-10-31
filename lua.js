@@ -2,8 +2,6 @@
 
 // Hyprland window tag marking a window this widget has tinted.
 const TINT_TAG = "window_tint"
-// Custom Hyprland event sent after each change so every instance refreshes.
-const REFRESH_EVENT = "omaTint"
 
 function quote(value){
     const s = String(value)
@@ -119,13 +117,8 @@ function parseWindowShadeLoaded(text){
 
 }
 
-function notifyChanged(){
-    return 'hl.dispatch(hl.dsp.event(' + quote(REFRESH_EVENT) + '))'
-}
-
 if (typeof module !== "undefined") module.exports = {
     TINT_TAG,
-    REFRESH_EVENT,
     quote,
     normalizeAddress,
     setScreenShader,
@@ -134,6 +127,5 @@ if (typeof module !== "undefined") module.exports = {
     parseWindowShadeLoaded,
     setWindowShader,
     tagWindow,
-    parseTintedWindows,
-    notifyChanged
+    parseTintedWindows
 }

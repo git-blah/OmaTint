@@ -391,7 +391,3 @@ for (const [windows, ans] of parseTintedWindowsCases) {
     assert.deepEqual(Lua.parseTintedWindows(windows), ans);
   });
 }
-
-test("notifyChanged sends the refresh event", () => {
-  assert.equal(Lua.notifyChanged(), 'hl.dispatch(hl.dsp.event("omaTint"))');
-});

@@ -7,9 +7,11 @@
   "license" :"MIT",
   "description": "Customize screen with colors tints(grayscale, warmlight) for perfect visual atmosphere",
   "kinds": [
+    "service",
     "bar-widget"
   ],
   "entryPoints": {
+    "service": "Service.qml",
     "barWidget": "tint.qml"
   },
   "barWidget": {
