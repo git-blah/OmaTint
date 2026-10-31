@@ -33,7 +33,7 @@ omarchy plugin add https://github.com/git-blah/omaTint.git --enable
 The widget appears in the right-hand section of the bar. To move it:
 
 ```bash
-omarchy bar move omaTint --section left
+omarchy bar move io.github.git-blah.omatint --section left
 ```
 
 ## Usage
@@ -72,7 +72,7 @@ Window tints are kept, and show again when screen tint is turned off.
 To open the panel from a keybinding, bind a key to:
 
 ```bash
-omarchy-shell shell summon omaTint '{}'
+omarchy-shell shell summon io.github.git-blah.omatint '{}'
 ```
 
 ## Tint windows: HyprWindowShade
