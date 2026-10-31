@@ -172,6 +172,13 @@ shader with `glslangValidator` (if installed), and runs the Node tests in
 | [`shaders/`](shaders/)       | The tints listed in the panel                                           |
 | [`tests/`](tests/)           | Unit tests and the check script                                         |
 
+## Credits
+
+Window tints are powered by
+[HyprWindowShade](https://github.com/ManofJELLO/HyprWindowShade) by
+[ManofJELLO](https://github.com/ManofJELLO) (MIT license). omaTint doesn't
+include its code; you install it separately with `hyprpm`.
+
 ## License
 
 [MIT](LICENSE) © 2026 git-blah
