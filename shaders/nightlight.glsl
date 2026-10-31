@@ -1,14 +1,14 @@
 #version 320 es
 
-precision highp float;   
+precision mediump float;
+in vec2 v_texcoord;
+layout(location = 0) out vec4 fragColor;
+uniform sampler2D tex;
 
-in vec2 v_texcoord;      
-uniform sampler2D tex;  
-out vec4 fragColor;      
+// Roughly a 3400K lamp: green drops along with blue, so the tint reads amber, not yellow
+const vec3 WARM = vec3(1.0, 0.76, 0.54);
 
 void main() {
-    vec4 col = texture(tex, v_texcoord);
-    vec3 warm = col.rgb * vec3(1.12, 1.03, 0.78);
-    col.rgb = warm;
-    fragColor = col;                      
+    vec4 pix = texture(tex, v_texcoord);
+    fragColor = vec4(pix.rgb * WARM, pix.a);
 }
